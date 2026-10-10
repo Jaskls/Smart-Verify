@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Transactions · Smart-Verify</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" id="sidebar"></aside>
+
+    <div class="main">
+      <header class="page-head">
+        <div>
+          <button class="btn btn-ghost btn-sm menu-toggle" type="button" aria-label="Open menu"></button>
+          <p class="eyebrow">Records</p>
+          <h1>Transaction history</h1>
+          <p>Every borrow and return, including which components were checked back in.</p>
+        </div>
+      </header>
+
+      <main class="content">
+        <div class="toolbar" role="search">
+          <div class="input-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+            <label class="visually-hidden" for="search">Search transactions</label>
+            <input class="input" id="search" type="search" placeholder="Search by student, item or reference">
+          </div>
+          <div class="segmented" role="group" aria-label="Status filter" id="status-filter">
+            <button type="button" aria-pressed="true" data-status="">All</button>
+            <button type="button" aria-pressed="false" data-status="open">Open</button>
+            <button type="button" aria-pressed="false" data-status="overdue">Overdue</button>
+            <button type="button" aria-pressed="false" data-status="returned">Returned</button>
+          </div>
+        </div>
+
+        <section class="card">
+          <div class="card-body flush table-wrap">
+            <table class="table">
+              <thead>
+                <tr><th>Ref</th><th>Student</th><th>Equipment</th><th>Qty</th><th>Borrowed</th><th>Due</th><th>Returned</th><th>Parts back</th><th>Status</th></tr>
+              </thead>
+              <tbody id="history-body"></tbody>
+            </table>
+          </div>
+        </section>
+        <p class="result-count" id="result-count"></p>
+      </main>
+    </div>
+  </div>
+
+  <script type="module" src="js/pages/history.js"></script>
+</body>
+</html>

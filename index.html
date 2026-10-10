@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in · Smart-Verify</title>
+  <meta name="description" content="Smart-Verify — laboratory equipment borrowing with verified check-out and return.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="auth">
+    <!-- Left: brand story -->
+    <section class="auth-brand">
+      <a class="brand" href="index.html">
+        <span class="brand-mark">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12.5l5 5L20 6.5"/></svg>
+        </span>
+        <span class="brand-name">Smart<span>-Verify</span></span>
+      </a>
+
+      <div class="auth-hero">
+        <h1>Every item out.<br><em>Every item back.</em></h1>
+        <p>Smart-Verify tracks laboratory equipment from the shelf to the student and back again, with every component checked along the way.</p>
+        <ul class="auth-points">
+          <li>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3"/></svg>
+            <div><strong>Scan to verify</strong><span>Student IDs and equipment tags, confirmed with a student PIN.</span></div>
+          </li>
+          <li>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+            <div><strong>Component checklists</strong><span>Know exactly which cable, lens or probe went out, and whether it came back.</span></div>
+          </li>
+          <li>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+            <div><strong>Due dates that matter</strong><span>Overdue items surface first, so nothing quietly goes missing.</span></div>
+          </li>
+        </ul>
+      </div>
+
+      <p class="auth-foot">SMART-VERIFY · LAB EQUIPMENT SYSTEM</p>
+    </section>
+
+    <!-- Right: sign-in form -->
+    <main class="auth-panel">
+      <div class="auth-card">
+        <div>
+          <p class="eyebrow">Welcome back</p>
+          <h2>Sign in to Smart-Verify</h2>
+        </div>
+
+        <div class="segmented" role="tablist" aria-label="Account type">
+          <button type="button" role="tab" aria-selected="true" data-role="student">Student</button>
+          <button type="button" role="tab" aria-selected="false" data-role="admin">Administrator</button>
+        </div>
+
+        <form id="signin-form" novalidate>
+          <div class="field">
+            <label for="identifier" id="identifier-label">Student number or school email</label>
+            <input class="input" id="identifier" name="identifier" autocomplete="username" placeholder="2024-00117" required>
+          </div>
+          <div class="field">
+            <label for="password">Password</label>
+            <input class="input" id="password" name="password" type="password" autocomplete="current-password" placeholder="••••••••" required>
+          </div>
+          <button class="btn btn-primary btn-block" type="submit">Sign in</button>
+        </form>
+
+        <p class="auth-note" id="signin-note">
+          Sign-in isn't connected yet. Real accounts arrive in Stage 3 with Supabase Auth.
+          For now, open a preview below.
+        </p>
+
+        <div class="divider">Preview the interface</div>
+        <div class="preview-links">
+          <a class="btn" href="dashboard.html" data-preview="admin">Administrator view</a>
+          <a class="btn" href="student.html" data-preview="student">Student view</a>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script type="module" src="js/pages/signin.js"></script>
+</body>
+</html>

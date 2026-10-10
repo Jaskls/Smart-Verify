@@ -1,0 +1,46 @@
+# Smart-Verify
+
+Smart-Verify is a laboratory equipment borrowing system. Administrators check
+equipment out to students, record due dates, and verify every component when
+items come back. Students see what they've borrowed and when it's due.
+
+**Current stage: 1 of 7. The interface is built and uses sample data.**
+See [PLAN.md](PLAN.md) for the full roadmap.
+
+## Technologies
+- **HTML, CSS, vanilla JavaScript.** Plain files with no framework and no build step.
+  JavaScript uses native ES modules (`<script type="module">`).
+- **Supabase** for the database, authentication and photo storage (from Stage 2).
+- **Netlify** for hosting, deployed from **GitHub**.
+
+## Project structure
+```
+index.html          Sign-in page
+dashboard.html      Admin overview
+equipment.html      Inventory (admin manages, students browse with ?view=student)
+borrow.html         Borrow & Return workflow
+history.html        Transaction history
+student.html        Student portal
+css/styles.css      All styles
+js/app.js           Shared helpers: sidebar, icons, dates, status tags, toasts
+js/sample-data.js   Sample data (replaced by Supabase in later stages)
+js/pages/*.js       One script per page
+netlify.toml        Netlify settings (static site, no build)
+```
+
+## Run it locally
+ES modules don't load from `file://`, so serve the folder with any static server:
+
+```bash
+# Option A: Netlify CLI
+netlify dev
+
+# Option B: Python
+python3 -m http.server 8000
+```
+Then open the printed address, for example http://localhost:8000.
+
+## What's left
+Stages 2 to 7: the Supabase database and security, real sign-in, saved
+equipment, saved loans, QR and PIN verification, then final testing and
+deploy. Details are in [PLAN.md](PLAN.md).

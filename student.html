@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>My Borrowings · Smart-Verify</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" id="sidebar"></aside>
+
+    <div class="main">
+      <header class="page-head">
+        <div>
+          <button class="btn btn-ghost btn-sm menu-toggle" type="button" aria-label="Open menu"></button>
+          <p class="eyebrow">Student</p>
+          <h1 id="greeting">My borrowings</h1>
+          <p>What you have out, when it's due back, and everything you've borrowed before.</p>
+        </div>
+        <div class="page-actions">
+          <a class="btn" href="equipment.html?view=student">Browse equipment</a>
+        </div>
+      </header>
+
+      <main class="content">
+        <section class="id-card" id="id-card" aria-label="Student ID"></section>
+
+        <section>
+          <h2 style="font-size:16px;margin-bottom:12px">Currently borrowed</h2>
+          <div class="loan-cards" id="loan-cards"></div>
+        </section>
+
+        <section class="card">
+          <div class="card-head"><h2>Past borrowings</h2></div>
+          <div class="card-body flush table-wrap">
+            <table class="table">
+              <thead><tr><th>Ref</th><th>Equipment</th><th>Qty</th><th>Borrowed</th><th>Returned</th><th>Status</th></tr></thead>
+              <tbody id="past-body"></tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script type="module" src="js/pages/student.js"></script>
+</body>
+</html>

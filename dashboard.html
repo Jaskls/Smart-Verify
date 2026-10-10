@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Dashboard · Smart-Verify</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" id="sidebar"></aside>
+
+    <div class="main">
+      <header class="page-head">
+        <div>
+          <button class="btn btn-ghost btn-sm menu-toggle" type="button" aria-label="Open menu"></button>
+          <p class="eyebrow" id="today-label">Today</p>
+          <h1>Lab overview</h1>
+          <p>What's out, what's due, and what needs attention.</p>
+        </div>
+        <div class="page-actions">
+          <a class="btn" href="equipment.html">Manage equipment</a>
+          <a class="btn btn-green" href="borrow.html">New borrow</a>
+        </div>
+      </header>
+
+      <main class="content">
+        <section class="stats" id="stats" aria-label="Summary"></section>
+
+        <section class="quick-actions" aria-label="Quick actions">
+          <a class="quick-action" href="borrow.html">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4L3 8l4 4"/><path d="M3 8h14"/><path d="M17 20l4-4-4-4"/><path d="M21 16H7"/></svg>
+            <strong>Check out equipment</strong>
+            <span>Find a student, pick items, set a due date.</span>
+          </a>
+          <a class="quick-action" href="borrow.html#return">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></svg>
+            <strong>Process a return</strong>
+            <span>Verify each component as it comes back.</span>
+          </a>
+          <a class="quick-action" href="equipment.html#add">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            <strong>Add equipment</strong>
+            <span>Register a new item with photo and parts.</span>
+          </a>
+        </section>
+
+        <div class="grid-2">
+          <section class="card">
+            <div class="card-head">
+              <h2>Needs attention</h2>
+              <a class="btn btn-ghost btn-sm" href="history.html?status=open">All open loans</a>
+            </div>
+            <div class="card-body flush"><ul class="list" id="attention-list"></ul></div>
+          </section>
+
+          <section class="card">
+            <div class="card-head">
+              <h2>Stock levels</h2>
+              <a class="btn btn-ghost btn-sm" href="equipment.html">Inventory</a>
+            </div>
+            <div class="card-body flush"><ul class="list" id="stock-list"></ul></div>
+          </section>
+        </div>
+
+        <section class="card">
+          <div class="card-head">
+            <h2>Recent activity</h2>
+            <a class="btn btn-ghost btn-sm" href="history.html">Full history</a>
+          </div>
+          <div class="card-body flush table-wrap">
+            <table class="table">
+              <thead><tr><th>Ref</th><th>Student</th><th>Equipment</th><th>Qty</th><th>Borrowed</th><th>Status</th></tr></thead>
+              <tbody id="recent-body"></tbody>
+            </table>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script type="module" src="js/pages/dashboard.js"></script>
+</body>
+</html>

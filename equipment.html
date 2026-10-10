@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Equipment · Smart-Verify</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" id="sidebar"></aside>
+
+    <div class="main">
+      <header class="page-head">
+        <div>
+          <button class="btn btn-ghost btn-sm menu-toggle" type="button" aria-label="Open menu"></button>
+          <p class="eyebrow">Inventory</p>
+          <h1>Equipment</h1>
+          <p id="page-intro">Every item the lab lends out, with live quantities and the parts that go with it.</p>
+        </div>
+        <div class="page-actions" data-admin-only>
+          <button class="btn btn-green" type="button" id="add-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            Add equipment
+          </button>
+        </div>
+      </header>
+
+      <main class="content">
+        <div class="toolbar" role="search">
+          <div class="input-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+            <label class="visually-hidden" for="search">Search equipment</label>
+            <input class="input" id="search" type="search" placeholder="Search by name, tag or location">
+          </div>
+          <label class="visually-hidden" for="category-filter">Category</label>
+          <select class="select" id="category-filter"><option value="">All categories</option></select>
+          <label class="visually-hidden" for="stock-filter">Availability</label>
+          <select class="select" id="stock-filter">
+            <option value="">Any availability</option>
+            <option value="available">Available</option>
+            <option value="low">Low stock</option>
+            <option value="out">Out of stock</option>
+          </select>
+        </div>
+        <p class="result-count" id="result-count"></p>
+        <section class="equip-grid" id="equip-grid" aria-live="polite"></section>
+      </main>
+    </div>
+  </div>
+
+  <!-- Detail modal -->
+  <dialog class="modal" id="detail-modal" aria-labelledby="detail-title">
+    <div class="modal-head">
+      <h2 id="detail-title">Equipment</h2>
+      <button class="icon-btn" type="button" data-close aria-label="Close">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body" id="detail-body"></div>
+    <div class="modal-foot" data-admin-only>
+      <button class="btn btn-danger" type="button" id="delete-btn">Delete</button>
+      <span style="flex:1"></span>
+      <button class="btn" type="button" id="edit-btn">Edit details</button>
+    </div>
+  </dialog>
+
+  <!-- Add / edit modal -->
+  <dialog class="modal" id="form-modal" aria-labelledby="form-title">
+    <form id="equip-form" novalidate>
+      <div class="modal-head">
+        <h2 id="form-title">Add equipment</h2>
+        <button class="icon-btn" type="button" data-close aria-label="Close">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="photo-drop">
+          <div class="thumb" id="photo-preview">—</div>
+          <div class="field" style="flex:1">
+            <label for="photo">Photo</label>
+            <input id="photo" name="photo" type="file" accept="image/png, image/jpeg, image/webp">
+            <span class="hint">JPG, PNG or WebP. Saved to Supabase Storage from Stage 4.</span>
+          </div>
+        </div>
+        <div class="form-grid">
+          <div class="field span-2">
+            <label for="f-name">Name</label>
+            <input class="input" id="f-name" name="name" required placeholder="e.g. Compound Microscope">
+          </div>
+          <div class="field">
+            <label for="f-tag">Asset tag</label>
+            <input class="input mono" id="f-tag" name="tag" required placeholder="SV-EQ-0010">
+          </div>
+          <div class="field">
+            <label for="f-category">Category</label>
+            <select class="select" id="f-category" name="category" required></select>
+          </div>
+          <div class="field span-2">
+            <label for="f-location">Storage location</label>
+            <input class="input" id="f-location" name="location" placeholder="e.g. Bio Lab · Cabinet A">
+          </div>
+          <div class="field">
+            <label for="f-total">Total quantity</label>
+            <input class="input mono" id="f-total" name="total" type="number" min="0" required value="1">
+          </div>
+          <div class="field">
+            <label for="f-available">Available now</label>
+            <input class="input mono" id="f-available" name="available" type="number" min="0" required value="1">
+          </div>
+          <div class="field span-2">
+            <label for="f-condition">Condition</label>
+            <select class="select" id="f-condition" name="condition">
+              <option>Good</option><option>Fair</option><option>Needs repair</option>
+            </select>
+          </div>
+          <div class="field span-2">
+            <label for="f-component">Components checklist</label>
+            <div class="lookup-row">
+              <input class="input" id="f-component" placeholder="e.g. Power cable">
+              <button class="btn" type="button" id="add-component">Add</button>
+            </div>
+            <div class="chip-input" id="component-chips"></div>
+            <span class="hint">These parts are checked when the item goes out and again when it comes back.</span>
+          </div>
+        </div>
+        <p class="hint" id="form-error" style="color:var(--red)" role="alert"></p>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" type="button" data-close>Cancel</button>
+        <button class="btn btn-primary" type="submit" id="save-btn">Save equipment</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module" src="js/pages/equipment.js"></script>
+</body>
+</html>

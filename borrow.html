@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Borrow &amp; Return · Smart-Verify</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" id="sidebar"></aside>
+
+    <div class="main">
+      <header class="page-head">
+        <div>
+          <button class="btn btn-ghost btn-sm menu-toggle" type="button" aria-label="Open menu"></button>
+          <p class="eyebrow">Front desk</p>
+          <h1>Borrow &amp; Return</h1>
+          <p>Verify who is borrowing, what is leaving, and that every part comes back.</p>
+        </div>
+        <div class="segmented" role="tablist" aria-label="Mode">
+          <button type="button" role="tab" aria-selected="true" data-mode="borrow">Borrow</button>
+          <button type="button" role="tab" aria-selected="false" data-mode="return">Return</button>
+        </div>
+      </header>
+
+      <main class="content">
+        <!-- BORROW -->
+        <section class="workflow" id="borrow-panel" role="tabpanel">
+          <div class="steps">
+            <div class="card">
+              <div class="card-head"><div class="title-row"><span class="step-num">1</span><h2>Student</h2></div></div>
+              <div class="card-body">
+                <div class="lookup-row">
+                  <div class="input-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+                    <label class="visually-hidden" for="student-search">Student number or name</label>
+                    <input class="input" id="student-search" list="student-options" placeholder="Student number or name (try 2024-00117)" autocomplete="off">
+                    <datalist id="student-options"></datalist>
+                  </div>
+                  <button class="btn" type="button" id="find-student">Find</button>
+                  <button class="btn" type="button" disabled title="QR scanning arrives in Stage 6">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3z"/></svg>
+                    Scan ID
+                  </button>
+                </div>
+                <div id="student-result"></div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-head"><div class="title-row"><span class="step-num">2</span><h2>Equipment</h2></div></div>
+              <div class="card-body">
+                <div class="input-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+                  <label class="visually-hidden" for="equip-search">Search equipment</label>
+                  <input class="input" id="equip-search" placeholder="Search by name or asset tag" autocomplete="off">
+                </div>
+                <div class="pick-list"><ul class="list" id="equip-pick" role="listbox" aria-label="Equipment"></ul></div>
+                <div class="form-grid" style="margin-top:16px">
+                  <div class="field">
+                    <label for="qty">Quantity</label>
+                    <input class="input mono" id="qty" type="number" min="1" value="1">
+                  </div>
+                  <div class="field">
+                    <label for="due">Due date</label>
+                    <input class="input" id="due" type="date">
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-head"><div class="title-row"><span class="step-num">3</span><h2>Component checklist</h2></div><span class="muted" id="check-count"></span></div>
+              <div class="card-body">
+                <p class="muted" id="checklist-empty">Pick an item to see the parts that go with it.</p>
+                <ul class="checklist" id="checklist-out"></ul>
+              </div>
+            </div>
+          </div>
+
+          <aside class="card summary">
+            <div class="card-head"><h2>Borrow slip</h2></div>
+            <div class="card-body">
+              <dl class="kv" id="slip"></dl>
+              <div class="field" style="margin-top:16px">
+                <label for="notes">Notes</label>
+                <textarea class="textarea" id="notes" placeholder="Optional, e.g. class or purpose"></textarea>
+              </div>
+              <div class="field" style="margin-top:12px">
+                <label for="pin">Student PIN</label>
+                <input class="input mono" id="pin" type="password" inputmode="numeric" placeholder="Verification arrives in Stage 6" disabled>
+              </div>
+              <div class="ticket">
+                <button class="btn btn-green btn-block" type="button" id="confirm-borrow">Confirm borrow</button>
+                <p class="hint muted" id="borrow-hint" style="margin-top:8px;font-size:12px"></p>
+              </div>
+            </div>
+          </aside>
+        </section>
+
+        <!-- RETURN -->
+        <section class="workflow" id="return-panel" role="tabpanel" hidden>
+          <div class="steps">
+            <div class="card">
+              <div class="card-head">
+                <div class="title-row"><span class="step-num">1</span><h2>Open loans</h2></div>
+                <button class="btn btn-sm" type="button" disabled title="QR scanning arrives in Stage 6">Scan equipment</button>
+              </div>
+              <div class="card-body">
+                <div class="input-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+                  <label class="visually-hidden" for="loan-search">Search loans</label>
+                  <input class="input" id="loan-search" placeholder="Search by student, item or reference" autocomplete="off">
+                </div>
+                <div class="pick-list"><ul class="list" id="loan-pick" role="listbox" aria-label="Open loans"></ul></div>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="card-head"><div class="title-row"><span class="step-num">2</span><h2>Verify returned components</h2></div><span class="muted" id="return-count"></span></div>
+              <div class="card-body">
+                <p class="muted" id="return-empty">Select a loan to check its parts back in.</p>
+                <ul class="checklist" id="checklist-in"></ul>
+              </div>
+            </div>
+          </div>
+
+          <aside class="card summary">
+            <div class="card-head"><h2>Return slip</h2></div>
+            <div class="card-body">
+              <dl class="kv" id="return-slip"></dl>
+              <div class="field" style="margin-top:16px">
+                <label for="return-condition">Condition on return</label>
+                <select class="select" id="return-condition"><option>Good</option><option>Fair</option><option>Needs repair</option></select>
+              </div>
+              <div class="field" style="margin-top:12px">
+                <label for="return-notes">Notes</label>
+                <textarea class="textarea" id="return-notes" placeholder="Damage, missing parts, etc."></textarea>
+              </div>
+              <div class="ticket">
+                <button class="btn btn-primary btn-block" type="button" id="confirm-return">Confirm return</button>
+              </div>
+            </div>
+          </aside>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script type="module" src="js/pages/borrow.js"></script>
+</body>
+</html>
