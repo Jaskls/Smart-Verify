@@ -1,7 +1,7 @@
 /* Borrow & Return workflow.
 Now with: saved data, PIN check, overdue lockout + override code, Incomplete
 returns, Undo (30 s), QR scanning (with typing as backup), offline simulation. */
-import { students, equipment, transactions, findEquipment, findStudent, findStudentByNumber } from "../sample-data.js";
+import { students, equipment, transactions, findEquipment, findStudent, findStudentByNumber, getTransactionStudent } from "../sample-data.js";
 import {
   renderShell, setPreviewRole, escapeHtml, formatDate, toDateInputValue, daysUntil,
   statusTag, stockTag, equipmentThumb, initials, toast,
@@ -92,8 +92,9 @@ offlineBtn.addEventListener("click", () => {
 
 // UNDO BAR (30 seconds after a borrow or return)
 const undoBar = document.createElement("div");
+undoBar.id = "undo-bar";
+undoBar.className = "undo-bar";
 undoBar.hidden = true;
-undoBar.style.cssText = "position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:60;background:#1f2a44;color:#fff;padding:10px 14px;border-radius:10px;display:flex;gap:12px;align-items:center;font-size:14px;box-shadow:0 6px 20px rgba(0,0,0,.25)";
 undoBar.innerHTML = '<span>Action recorded.</span><button type="button" class="btn btn-sm" id="undo-btn"></button>';
 document.body.appendChild(undoBar);
 let undoTimer = null;
@@ -114,6 +115,8 @@ $("undo-btn").addEventListener("click", () => {
   if (!result.ok) { toast(result.reason, "error"); return; }
   save();
   undoBar.hidden = true;
+  clearInterval(undoTimer);
+  undoTimer = null;
   queueIfOffline("Undo last action");
   toast("Last action undone.");
   refreshAll();
@@ -306,9 +309,12 @@ $("confirm-borrow").addEventListener("click", () => {
   const qty = Number($("qty").value);
   const availableBefore = item.available;
   const conditionBefore = item.condition;
+  const borrower = findStudent(borrow.studentId);
   const tx = {
     id: `tx-${Math.max(...transactions.map((t) => Number(t.id.slice(3)))) + 1}`,
     studentId: borrow.studentId,
+    studentNameSnapshot: borrower.name,
+    studentNoSnapshot: borrower.studentNo,
     equipmentId: item.id,
     quantity: qty,
     borrowedAt: new Date().toISOString(),
@@ -374,16 +380,16 @@ function renderLoanPick() {
     .filter((t) => !t.returnedAt)
     .sort(byDue)
     .filter((t) => {
-      const s = findStudent(t.studentId); const e = findEquipment(t.equipmentId);
+      const s = getTransactionStudent(t); const e = findEquipment(t.equipmentId);
       return !q || `${s.name} ${s.studentNo} ${e?.name} ${e?.tag} ${t.id}`.toLowerCase().includes(q);
     });
   $("loan-pick").innerHTML = open.map((t) => {
-    const s = findStudent(t.studentId); const e = findEquipment(t.equipmentId);
+    const s = getTransactionStudent(t); const e = findEquipment(t.equipmentId);
     return `
       <li role="option" data-id="${t.id}" aria-selected="${t.id === ret.txId}">
         <div class="grow">
           <div class="cell-main">${escapeHtml(e?.name ?? "Deleted item")} × ${t.quantity}</div>
-          <div class="cell-sub">${escapeHtml(s.name)} · <span class="mono">${t.id.toUpperCase()}</span> · due ${formatDate(t.dueAt)}</div>
+          <div class="cell-sub">${escapeHtml(s.name)}${s.former ? " · Former student" : ""} · <span class="mono">${t.id.toUpperCase()}</span> · due ${formatDate(t.dueAt)}</div>
         </div>
         ${statusTag(t)}
       </li>`;
@@ -426,13 +432,13 @@ $("checklist-in").addEventListener("change", (e) => {
 function renderReturnSlip() {
   const tx = currentLoan();
   if (!tx) { $("return-slip").innerHTML = '<dt>Loan</dt><dd class="muted">—</dd>'; return; }
-  const s = findStudent(tx.studentId); const e = findEquipment(tx.equipmentId);
+  const s = getTransactionStudent(tx); const e = findEquipment(tx.equipmentId);
   const parts = partsToCheck(tx);
   const missing = parts.length - [...ret.checked].filter((p) => parts.includes(p)).length;
   const earlier = tx.missing?.length ? `<dt>History</dt><dd><span class="tag amber">Earlier return was incomplete</span></dd>` : "";
   $("return-slip").innerHTML = `
     <dt>Ref</dt><dd><span class="code-tag">${tx.id.toUpperCase()}</span></dd>
-    <dt>Student</dt><dd>${escapeHtml(s.name)}</dd>
+    <dt>Student</dt><dd>${escapeHtml(s.name)}${s.former ? ' <span class="tag plain">Former student</span>' : ""}</dd>
     <dt>Item</dt><dd>${escapeHtml(e?.name ?? "Deleted item")} × ${tx.quantity}</dd>
     <dt>Due</dt><dd>${formatDate(tx.dueAt)} ${statusTag(tx)}</dd>
     ${earlier}

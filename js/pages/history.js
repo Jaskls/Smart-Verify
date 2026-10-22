@@ -1,5 +1,5 @@
 // Transaction history — searchable, filterable list of every borrow and return.
-import { transactions, findEquipment, findStudent } from "../sample-data.js";
+import { transactions, findEquipment, getTransactionStudent } from "../sample-data.js";
 import { renderShell, setPreviewRole, escapeHtml, formatDate, loanStatus, statusTag } from "../app.js";
 
 setPreviewRole("admin");
@@ -23,14 +23,15 @@ function render() {
     .sort((a, b) => new Date(b.borrowedAt) - new Date(a.borrowedAt))
     .filter(matchesStatus)
     .filter((tx) => {
-      const s = findStudent(tx.studentId);
+      const s = getTransactionStudent(tx);
       const e = findEquipment(tx.equipmentId);
-      return !q || `${tx.id} ${s.name} ${s.studentNo} ${e?.name ?? ""} ${e?.tag ?? ""}`.toLowerCase().includes(q);
+      const borrower = `${s.name} ${s.studentNo} ${s.former ? "former student" : ""}`;
+      return !q || `${tx.id} ${borrower} ${e?.name ?? ""} ${e?.tag ?? ""}`.toLowerCase().includes(q);
     });
 
   document.getElementById("history-body").innerHTML = rows.length
     ? rows.map((tx) => {
-        const s = findStudent(tx.studentId);
+        const s = getTransactionStudent(tx);
         const e = findEquipment(tx.equipmentId);
         const back = tx.checklistIn
           ? `<span class="mono">${tx.checklistIn.length} / ${tx.checklistOut.length}</span>`
@@ -39,7 +40,7 @@ function render() {
         return `
           <tr>
             <td><span class="code-tag">${tx.id.toUpperCase()}</span></td>
-            <td><div class="cell-main">${escapeHtml(s.name)}</div><div class="cell-sub mono">${s.studentNo}</div></td>
+            <td><div class="cell-main">${escapeHtml(s.name)}${s.former ? ' <span class="tag plain">Former student</span>' : ""}</div><div class="cell-sub mono">${escapeHtml(s.studentNo || "Student ID unavailable")}</div></td>
             <td><div class="cell-main">${escapeHtml(e?.name ?? "Deleted item")}</div>${tx.notes ? `<div class="cell-sub">${escapeHtml(tx.notes)}</div>` : ""}</td>
             <td class="mono">${tx.quantity}</td>
             <td>${formatDate(tx.borrowedAt)}</td>

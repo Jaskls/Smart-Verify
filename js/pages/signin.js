@@ -1,6 +1,7 @@
 // Sign-in page (Stage 1: interface only — no real authentication yet).
-import { setPreviewRole, toast } from "../app.js";
+import { addThemeToggle, setPreviewRole, toast } from "../app.js";
 
+addThemeToggle(document.querySelector(".auth-panel"));
 const tabs = document.querySelectorAll("[data-role]");
 const label = document.getElementById("identifier-label");
 const input = document.getElementById("identifier");

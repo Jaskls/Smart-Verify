@@ -9,7 +9,7 @@ Process:
 
 Only equipment and transactions r saved. Students come from the seed.
 If the team changes sample-data.js, bump SEED_VERSION so old saves are ignored. */
-import { equipment, transactions } from "./sample-data.js";
+import { equipment, students, transactions } from "./sample-data.js";
 
 const SEED_VERSION = 1;
 const KEY = "sv.data";
@@ -25,6 +25,15 @@ function hydrate() {
   } catch (err) {
     console.warn("Could not read saved data, using the seed data.", err);
   }
+}
+
+function preserveBorrowerSnapshots() {
+  transactions.forEach((tx) => {
+    const student = students.find((entry) => entry.id === tx.studentId);
+    if (!student) return;
+    if (!tx.studentNameSnapshot) tx.studentNameSnapshot = student.name;
+    if (!tx.studentNoSnapshot) tx.studentNoSnapshot = student.studentNo;
+  });
 }
 
 export function save() {
@@ -43,6 +52,7 @@ export function resetDemo() {
 }
 
 hydrate();
+preserveBorrowerSnapshots();
 
 // Keep saving without every page having to call save().
 window.addEventListener("pagehide", save);

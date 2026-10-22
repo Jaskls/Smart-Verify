@@ -8,9 +8,53 @@
 import { admins, students, previewStudentId } from "./sample-data.js";
 import "./store.js"; // loads saved data into the sample-data arrays (see store.js)
 
+const THEME_KEY = "sv-theme";
+const themePreference = window.matchMedia("(prefers-color-scheme: dark)");
+
+function applyTheme(theme) {
+  document.documentElement.dataset.theme = theme;
+  document.querySelectorAll(".theme-toggle").forEach(updateThemeToggle);
+}
+
+function updateThemeToggle(button) {
+  const isDark = document.documentElement.dataset.theme === "dark";
+  button.setAttribute("aria-label", `Switch to ${isDark ? "light" : "dark"} mode`);
+  button.setAttribute("aria-pressed", String(isDark));
+  button.innerHTML = `${icon(isDark ? "sun" : "moon")}<span>${isDark ? "Light" : "Dark"} mode</span>`;
+}
+
+const savedTheme = localStorage.getItem(THEME_KEY);
+applyTheme(savedTheme === "light" || savedTheme === "dark"
+  ? savedTheme
+  : themePreference.matches ? "dark" : "light");
+
+themePreference.addEventListener("change", (event) => {
+  if (!localStorage.getItem(THEME_KEY)) applyTheme(event.matches ? "dark" : "light");
+});
+
+window.addEventListener("storage", (event) => {
+  if (event.key === THEME_KEY) {
+    applyTheme(event.newValue === "dark" ? "dark" : event.newValue === "light" ? "light" : themePreference.matches ? "dark" : "light");
+  }
+});
+
+export function addThemeToggle(container) {
+  if (!container || container.querySelector(".theme-toggle")) return;
+  const button = document.createElement("button");
+  button.className = "btn theme-toggle";
+  button.type = "button";
+  updateThemeToggle(button);
+  button.addEventListener("click", () => {
+    const theme = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+    localStorage.setItem(THEME_KEY, theme);
+    applyTheme(theme);
+  });
+  container.appendChild(button);
+}
+
 // Icons 
 const ICONS = {
-  logo: '<path d="M4 12.5l5 5L20 6.5" stroke-width="2.6"/>',
+  logo: '<path d="M8 5H5v3m11-3h3v3M5 16v3h3m11-3v3h-3"/><path d="m8.5 12.2 2.3 2.3 4.8-5" stroke-width="2.6"/>',
   dashboard: '<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>',
   box: '<path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/>',
   swap: '<path d="M7 4L3 8l4 4"/><path d="M3 8h14"/><path d="M17 20l4-4-4-4"/><path d="M21 16H7"/>',
@@ -29,6 +73,8 @@ const ICONS = {
   edit: '<path d="M4 20h4L19 9l-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/>',
   trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/>',
   return: '<path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/>',
+  moon: '<path d="M20.9 13A9 9 0 0 1 11 3.1 9 9 0 1 0 20.9 13z"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/>',
 };
 
 export function icon(name) {
@@ -40,6 +86,7 @@ const NAV = {
   admin: [
     { href: "dashboard.html", label: "Dashboard", icon: "dashboard" },
     { href: "equipment.html", label: "Equipment", icon: "box" },
+    { href: "qr-stickers.html", label: "QR Stickers", icon: "qr" },
     { href: "borrow.html", label: "Borrow & Return", icon: "swap" },
     { href: "history.html", label: "Transactions", icon: "history" },
   ],
@@ -74,6 +121,8 @@ export function renderShell({ role = "admin", active }) {
   const sidebar = document.getElementById("sidebar");
   if (!sidebar) return;
 
+  addThemeToggle(document.querySelector(".page-head"));
+
   const person = role === "student"
     ? { name: students.find((s) => s.id === previewStudentId).name, sub: "Student" }
     : { name: admins[0].name, sub: admins[0].role };
@@ -86,10 +135,13 @@ export function renderShell({ role = "admin", active }) {
     .join("");
 
   sidebar.innerHTML = `
-    <a class="brand" href="${role === "student" ? "student.html" : "dashboard.html"}">
-      <span class="brand-mark">${icon("logo")}</span>
-      <span class="brand-name">Smart<span>-Verify</span></span>
-    </a>
+    <div class="sidebar-head">
+      <a class="brand" href="${role === "student" ? "student.html" : "dashboard.html"}">
+        <span class="brand-mark">${icon("logo")}</span>
+        <span class="brand-name">Smart<span>-Verify</span></span>
+      </a>
+      <button class="sidebar-close icon-btn" type="button" aria-label="Close navigation menu">${icon("close")}</button>
+    </div>
     <nav class="nav" aria-label="Main">
       <div class="nav-label">${role === "student" ? "Student" : "Administrator"}</div>
       ${links}
@@ -100,28 +152,34 @@ export function renderShell({ role = "admin", active }) {
       <a href="index.html">Sign out</a>
     </div>`;
 
-  // Preview banner — honest reminder that nothing is saved yet.
-  const main = document.querySelector(".main");
-  if (main && !main.querySelector(".preview-banner")) {
-    main.insertAdjacentHTML("afterbegin", `
-      <div class="preview-banner" role="note">
-        ${icon("alert").replace("<svg", '<svg width="16" height="16"')}
-        <span><strong>Interface preview.</strong> Sample data only. Changes reset when you reload the page.</span>
-      </div>`);
-  }
+  const menuButtons = document.querySelectorAll(".menu-toggle");
+  const setMenuOpen = (isOpen) => {
+    sidebar.classList.toggle("open", isOpen);
+    menuButtons.forEach((btn) => {
+      btn.setAttribute("aria-controls", sidebar.id);
+      btn.setAttribute("aria-expanded", String(isOpen));
+      btn.setAttribute("aria-label", isOpen ? "Close navigation menu" : "Open navigation menu");
+    });
+  };
 
   // Mobile menu toggle
-  document.querySelectorAll(".menu-toggle").forEach((btn) => {
+  menuButtons.forEach((btn) => {
     btn.innerHTML = icon("menu");
+    btn.setAttribute("aria-controls", sidebar.id);
+    btn.setAttribute("aria-expanded", "false");
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
-      sidebar.classList.toggle("open");
+      setMenuOpen(!sidebar.classList.contains("open"));
     });
   });
+  sidebar.querySelector(".sidebar-close").addEventListener("click", () => setMenuOpen(false));
   document.addEventListener("click", (e) => {
-    if (sidebar.classList.contains("open") && !sidebar.contains(e.target)) {
-      sidebar.classList.remove("open");
+    if (sidebar.classList.contains("open") && !sidebar.contains(e.target) && !e.target.closest(".menu-toggle")) {
+      setMenuOpen(false);
     }
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && sidebar.classList.contains("open")) setMenuOpen(false);
   });
 }
 

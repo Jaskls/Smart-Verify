@@ -21,12 +21,26 @@ equipment.html      Inventory (admin manages, students browse with ?view=student
 borrow.html         Borrow & Return workflow
 history.html        Transaction history
 student.html        Student portal
+qr-stickers.html    Admin QR sticker queue and print preview
 css/styles.css      All styles
 js/app.js           Shared helpers: sidebar, icons, dates, status tags, toasts
 js/sample-data.js   Sample data (replaced by Supabase in later stages)
+js/qr-queue.js      Browser-local QR sticker queue
 js/pages/*.js       One script per page
 netlify.toml        Netlify settings (static site, no build)
 ```
+
+## QR equipment stickers
+Admins can select **Add to QR Print Queue** when creating equipment, print a
+single sticker from the equipment list or detail view, or manage a batch from
+**QR Stickers** in the sidebar. The queue is stored in this browser's
+`localStorage` for the demo; it is not synced to a database. QR codes are
+generated in the browser and contain the equipment asset tag.
+
+Transaction history keeps records when a student is removed. Borrower name and
+student number are stored with new transactions, and existing records are
+backfilled from available student data; when no saved identity is available,
+the record is labelled **Former or removed student**.
 
 ## Run it locally
 ES modules don't load from `file://`, so serve the folder with any static server:

@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>QR Sticker Queue · Smart-Verify</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar" id="sidebar"></aside>
+    <div class="main">
+      <header class="page-head">
+        <div>
+          <button class="btn btn-ghost btn-sm menu-toggle" type="button" aria-label="Open menu"></button>
+          <p class="eyebrow">Equipment labels</p>
+          <h1 id="sticker-title">QR sticker print queue</h1>
+          <p id="sticker-description">Print queued equipment stickers, up to 12 per sheet.</p>
+        </div>
+        <div class="page-actions screen-only">
+          <a class="btn" href="equipment.html">Equipment</a>
+          <button class="btn btn-primary" type="button" id="print-stickers">Print All Queued Stickers</button>
+          <button class="btn btn-danger" type="button" id="clear-queue">Clear Queue</button>
+        </div>
+      </header>
+      <main class="content">
+        <p class="result-count" id="queue-count" aria-live="polite"></p>
+        <div id="sticker-pages" class="sticker-pages" aria-live="polite"></div>
+      </main>
+    </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script type="module" src="js/pages/qr-stickers.js"></script>
+</body>
+</html>

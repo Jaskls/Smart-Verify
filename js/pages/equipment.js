@@ -1,6 +1,7 @@
 // Equipment inventory — search, filter, view, add, edit, delete.
 // Stage 1: changes are kept in memory only. Stage 4 saves them to Supabase.
 import { equipment, categories, transactions } from "../sample-data.js";
+import { addStickerToQueue } from "../qr-queue.js";
 import {
   renderShell, getPreviewRole, escapeHtml, stockTag, conditionTag,
   initials, toast, openModal, closeModal,
@@ -27,14 +28,43 @@ const detailBody = document.getElementById("detail-body");
 const formModal = document.getElementById("form-modal");
 const form = document.getElementById("equip-form");
 const formError = document.getElementById("form-error");
+const formCategory = document.getElementById("f-category");
+const customCategoryField = document.getElementById("custom-category-field");
+const customCategoryInput = document.getElementById("f-custom-category");
+const qrQueueField = document.getElementById("qr-queue-field");
+const addToQrQueueInput = document.getElementById("add-to-qr-queue");
 const photoInput = document.getElementById("photo");
 const photoPreview = document.getElementById("photo-preview");
 const chips = document.getElementById("component-chips");
 const componentInput = document.getElementById("f-component");
 
-const categoryOptions = categories.map((c) => `<option>${escapeHtml(c)}</option>`).join("");
-categoryFilter.insertAdjacentHTML("beforeend", categoryOptions);
-document.getElementById("f-category").innerHTML = categoryOptions;
+const OTHER_CATEGORY = "__other__";
+
+function getKnownCategories() {
+  return [...new Set([...categories, ...equipment.map((item) => item.category).filter(Boolean)])];
+}
+
+function refreshCategoryOptions() {
+  const selected = categoryFilter.value;
+  categoryFilter.innerHTML = `<option value="">All categories</option>${getKnownCategories()
+    .map((category) => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`).join("")}`;
+  categoryFilter.value = selected;
+
+  formCategory.innerHTML = `<option value="">Choose a category</option>${getKnownCategories()
+    .map((category) => `<option value="${escapeHtml(category)}">${escapeHtml(category)}</option>`).join("")}
+    <option value="${OTHER_CATEGORY}">Other</option>`;
+}
+
+refreshCategoryOptions();
+
+function updateCustomCategoryVisibility() {
+  const isOther = formCategory.value === OTHER_CATEGORY;
+  customCategoryField.hidden = !isOther;
+  customCategoryInput.required = isOther;
+  if (!isOther) customCategoryInput.value = "";
+}
+
+formCategory.addEventListener("change", updateCustomCategoryVisibility);
 
 let selectedId = null; // item open in the detail modal
 let editingId = null; // item being edited (null = adding new)
@@ -49,6 +79,7 @@ function stockLevel(item) {
 }
 
 function render() {
+  refreshCategoryOptions();
   const q = search.value.trim().toLowerCase();
   const cat = categoryFilter.value;
   const stock = stockFilter.value;
@@ -64,29 +95,43 @@ function render() {
 
   grid.innerHTML = results.length
     ? results.map((item) => `
-        <button class="card equip-card" type="button" data-id="${item.id}">
-          <div class="equip-photo">
-            ${item.photo ? `<img src="${item.photo}" alt="">` : escapeHtml(initials(item.name))}
-            ${stockTag(item)}
-          </div>
-          <div class="equip-info">
-            <span class="code-tag" style="justify-self:start">${escapeHtml(item.tag)}</span>
-            <h3>${escapeHtml(item.name)}</h3>
-            <div class="equip-meta">
-              <span>${escapeHtml(item.category)}</span>
-              <span><span class="qty">${item.available}</span> / ${item.total} available</span>
+        <article class="card equip-card">
+          <button class="equip-card-open" type="button" data-id="${escapeHtml(item.id)}">
+            <div class="equip-photo">
+              ${item.photo ? `<img src="${item.photo}" alt="">` : escapeHtml(initials(item.name))}
+              ${stockTag(item)}
             </div>
-          </div>
-        </button>`).join("")
+            <div class="equip-info">
+              <span class="code-tag" style="justify-self:start">${escapeHtml(item.tag)}</span>
+              <h3>${escapeHtml(item.name)}</h3>
+              <div class="equip-meta">
+                <span>${escapeHtml(item.category)}</span>
+                <span><span class="qty">${item.available}</span> / ${item.total} available</span>
+              </div>
+            </div>
+          </button>
+          ${isAdmin ? `<div class="equip-card-actions"><button class="btn btn-sm" type="button" data-print-id="${escapeHtml(item.id)}">Print QR sticker</button></div>` : ""}
+        </article>`).join("")
     : '<div class="card empty" style="grid-column:1/-1">No equipment matches your search.</div>';
 }
 
 [search, categoryFilter, stockFilter].forEach((el) => el.addEventListener("input", render));
 
 grid.addEventListener("click", (e) => {
+  const printButton = e.target.closest("[data-print-id]");
+  if (printButton) {
+    printSticker(printButton.dataset.printId);
+    return;
+  }
   const card = e.target.closest("[data-id]");
   if (card) showDetail(card.dataset.id);
 });
+
+function printSticker(id) {
+  const url = `qr-stickers.html?item=${encodeURIComponent(id)}`;
+  const printWindow = window.open(url, "_blank");
+  if (!printWindow) location.assign(url);
+}
 
 // Detail -------------------------------------------------------------------------
 function showDetail(id) {
@@ -96,6 +141,8 @@ function showDetail(id) {
     .reduce((sum, t) => sum + t.quantity, 0);
 
   document.getElementById("detail-title").textContent = item.name;
+  const printButton = document.getElementById("print-detail-qr");
+  if (printButton) printButton.dataset.printId = item.id;
   detailBody.innerHTML = `
     <div class="detail-hero">
       <div class="equip-photo">${item.photo ? `<img src="${item.photo}" alt="${escapeHtml(item.name)}">` : escapeHtml(initials(item.name))}</div>
@@ -144,6 +191,10 @@ detailBody.addEventListener("click", (e) => {
   render();
 });
 
+document.getElementById("print-detail-qr")?.addEventListener("click", (e) => {
+  printSticker(e.currentTarget.dataset.printId);
+});
+
 // Add / edit form ------------------------------------------------------------------
 function renderChips() {
   chips.innerHTML = draftComponents.map((c, i) => `
@@ -187,6 +238,12 @@ function openForm(item = null) {
   editingId = item?.id ?? null;
   form.reset();
   formError.textContent = "";
+  qrQueueField.hidden = Boolean(item);
+  addToQrQueueInput.checked = false;
+  refreshCategoryOptions();
+  formCategory.value = item?.category ?? "";
+  customCategoryInput.value = "";
+  updateCustomCategoryVisibility();
   document.getElementById("form-title").textContent = item ? "Edit equipment" : "Add equipment";
   draftComponents = item ? [...item.components] : [];
   draftPhoto = item?.photo ?? null;
@@ -220,7 +277,7 @@ form.addEventListener("submit", (e) => {
   const data = {
     name: form.elements.name.value.trim(),
     tag: form.tag.value.trim().toUpperCase(),
-    category: form.category.value,
+    category: formCategory.value === OTHER_CATEGORY ? customCategoryInput.value.trim() : formCategory.value,
     location: form.location.value.trim(),
     total: Number(form.total.value),
     available: Number(form.available.value),
@@ -234,6 +291,7 @@ form.addEventListener("submit", (e) => {
   let error = "";
   if (!data.name) error = "Please enter a name.";
   else if (!data.tag) error = "Please enter an asset tag.";
+  else if (!data.category) error = "Please choose or enter a category.";
   else if (tagTaken) error = "That asset tag is already used by another item.";
   else if (!Number.isInteger(data.total) || data.total < 0) error = "Total quantity must be a whole number, 0 or more.";
   else if (!Number.isInteger(data.available) || data.available < 0 || data.available > data.total)
@@ -244,8 +302,17 @@ form.addEventListener("submit", (e) => {
     Object.assign(equipment.find((x) => x.id === editingId), data);
     toast(`Updated ${data.name} (preview only, not saved).`);
   } else {
-    equipment.unshift({ id: `eq-${Date.now()}`, ...data });
-    toast(`Added ${data.name} (preview only, not saved).`);
+    const newItem = { id: `eq-${Date.now()}`, ...data };
+    equipment.unshift(newItem);
+    if (addToQrQueueInput.checked) {
+      try {
+        addStickerToQueue(newItem);
+        toast(`${data.name} added to the QR print queue.`);
+      } catch {
+        toast("Equipment was added, but the QR print queue could not be saved.", "error");
+      }
+    }
+    else toast(`Added ${data.name} (preview only, not saved).`);
   }
   closeModal(formModal);
   render();

@@ -150,6 +150,15 @@ export const transactions = [
 // Lookup helpers 
 export const findEquipment = (id) => equipment.find((e) => e.id === id);
 export const findStudent = (id) => students.find((s) => s.id === id);
+export function getTransactionStudent(tx) {
+  const student = findStudent(tx.studentId);
+  if (student) return { name: student.name, studentNo: student.studentNo, former: false };
+  return {
+    name: tx.studentNameSnapshot || "Former or removed student",
+    studentNo: tx.studentNoSnapshot || "",
+    former: true,
+  };
+}
 export const findStudentByNumber = (no) =>
   students.find((s) => s.studentNo === no.trim());
 
