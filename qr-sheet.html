@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>QR sheet · Smart-Verify</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 24px; color: #1f2a44; }
+    h1 { font-size: 20px; margin: 0 0 4px; }
+    h2 { font-size: 16px; margin: 28px 0 8px; }
+    p.note { color: #555; font-size: 13px; margin: 0 0 12px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 14px; }
+    .tile { border: 1px dashed #999; border-radius: 8px; padding: 10px; text-align: center; break-inside: avoid; }
+    .tile .qr { display: flex; justify-content: center; margin-bottom: 6px; }
+    .code { font: 600 13px ui-monospace, Consolas, monospace; }
+    .name { font-size: 12px; color: #444; }
+    button { padding: 8px 12px; border-radius: 8px; border: 1px solid #999; background: #fff; cursor: pointer; }
+    @media print { button, p.note { display: none; } body { margin: 8mm; } }
+  </style>
+</head>
+<body>
+  <h1>Smart-Verify QR sheet</h1>
+  <p class="note">Open this page from the running app, then print or save as PDF. Equipment QR codes hold the asset tag.</p>
+  <button onclick="window.print()">Print</button>
+
+  <h2>Equipment stickers</h2>
+  <div class="grid" id="equipment"></div>
+
+  <h2>Student test ID cards (fictional)</h2>
+  <div class="grid" id="students"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script type="module">
+    import { equipment, students } from "./js/sample-data.js";
+
+    function tile(parent, text, title, subtitle) {
+      const el = document.createElement("div");
+      el.className = "tile";
+      el.innerHTML = '<div class="qr"></div><div class="code"></div><div class="name"></div>';
+      el.querySelector(".code").textContent = title;
+      el.querySelector(".name").textContent = subtitle;
+      parent.appendChild(el);
+      new QRCode(el.querySelector(".qr"), { text, width: 128, height: 128 });
+    }
+
+    equipment.forEach((e) => tile(document.getElementById("equipment"), e.tag, e.tag, e.name));
+    students.forEach((s) => tile(document.getElementById("students"), s.studentNo, s.studentNo, s.name));
+  </script>
+</body>
+</html>

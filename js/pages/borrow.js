@@ -1,17 +1,25 @@
-// Borrow & Return workflow.
-// Stage 1: works against sample data in memory. Stage 5 saves to Supabase.
+/* Borrow & Return workflow.
+Now with: saved data, PIN check, overdue lockout + override code, Incomplete
+returns, Undo (30 s), QR scanning (with typing as backup), offline simulation. */
 import { students, equipment, transactions, findEquipment, findStudent, findStudentByNumber } from "../sample-data.js";
 import {
   renderShell, setPreviewRole, escapeHtml, formatDate, toDateInputValue, daysUntil,
-  loanStatus, statusTag, stockTag, equipmentThumb, initials, toast,
+  statusTag, stockTag, equipmentThumb, initials, toast,
 } from "../app.js";
+import { save } from "../store.js";
+import {
+  checkPin, isLockedOut, overdueLoans, createOverrideCode, useOverrideCode,
+  partsToCheck, applyReturn, recordAction, undoLast, getUndoRemainingMs,
+} from "../rules.js";
+import { scanCode } from "../scan.js";
 
 setPreviewRole("admin");
 renderShell({ role: "admin", active: "borrow.html" });
 
 const $ = (id) => document.getElementById(id);
+const byDue = (a, b) => new Date(a.dueAt) - new Date(b.dueAt);
 
-// Tabs ---------------------------------------------------------------------------
+// Tabs 
 const tabs = document.querySelectorAll("[data-mode]");
 function setMode(mode) {
   tabs.forEach((t) => t.setAttribute("aria-selected", String(t.dataset.mode === mode)));
@@ -21,10 +29,105 @@ function setMode(mode) {
 }
 tabs.forEach((t) => t.addEventListener("click", () => setMode(t.dataset.mode)));
 
-// =============================================================================
+// Turn on the controls that used to say "arrives in Stage 6" 
+$("pin").disabled = false;
+$("pin").maxLength = 4;
+$("pin").placeholder = "4-digit PIN";
+const scanButtons = [...document.querySelectorAll('button[title*="QR scanning"]')];
+scanButtons.forEach((b) => { b.disabled = false; b.removeAttribute("title"); });
+
+/* OFFLINE SIMULATION
+Data is always saved on this device. When "offline" is on, each action is also
+listed as "waiting to sync", then "synced" when we go back online. */
+const OFFLINE_KEY = "sv.offline";
+const QUEUE_KEY = "sv.queue";
+const readQueue = () => { try { return JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]"); } catch { return []; } };
+const writeQueue = (q) => { try { localStorage.setItem(QUEUE_KEY, JSON.stringify(q)); } catch { /* ignore */ } };
+const isOffline = () => localStorage.getItem(OFFLINE_KEY) === "1";
+
+const banner = document.createElement("div");
+banner.style.cssText = "display:none;margin-bottom:16px;padding:12px 14px;border-radius:10px;border:1px solid #e0b4b4;background:#fdeeee;color:#7a1f1f;font-size:14px";
+document.querySelector(".content").prepend(banner);
+
+const offlineBtn = document.createElement("button");
+offlineBtn.type = "button";
+offlineBtn.className = "btn btn-sm";
+offlineBtn.style.marginTop = "10px";
+document.querySelector(".page-head > div").appendChild(offlineBtn);
+
+function renderOffline() {
+  const q = readQueue();
+  offlineBtn.textContent = isOffline() ? "Go back online" : "Simulate offline";
+  if (!isOffline()) { banner.style.display = "none"; return; }
+  banner.style.display = "block";
+  banner.innerHTML = `<strong>No connection.</strong> Changes are saved on this device and will sync when the connection returns.
+    <div style="margin-top:6px;font-size:13px">Waiting to sync: <strong>${q.length}</strong></div>
+    ${q.length ? `<ul style="margin:6px 0 0 18px;font-size:13px">${q.map((x) => `<li>${escapeHtml(x.label)}</li>`).join("")}</ul>` : ""}`;
+}
+
+function queueIfOffline(label) {
+  if (!isOffline()) return;
+  writeQueue([...readQueue(), { label, at: new Date().toISOString() }]);
+  renderOffline();
+}
+
+offlineBtn.addEventListener("click", () => {
+  if (!isOffline()) {
+    localStorage.setItem(OFFLINE_KEY, "1");
+    renderOffline();
+    return;
+  }
+  const n = readQueue().length;
+  banner.style.display = "block";
+  banner.style.background = "#fff7e0"; banner.style.borderColor = "#e6d199"; banner.style.color = "#6b5200";
+  banner.innerHTML = `<strong>Back online.</strong> Syncing ${n} change${n === 1 ? "" : "s"}…`;
+  setTimeout(() => {
+    localStorage.removeItem(OFFLINE_KEY);
+    writeQueue([]);
+    banner.style.background = "#fdeeee"; banner.style.borderColor = "#e0b4b4"; banner.style.color = "#7a1f1f";
+    renderOffline();
+    toast(n ? `${n} change${n === 1 ? "" : "s"} synced.` : "Online. Nothing waiting to sync.");
+  }, 1300);
+});
+
+// UNDO BAR (30 seconds after a borrow or return)
+const undoBar = document.createElement("div");
+undoBar.hidden = true;
+undoBar.style.cssText = "position:fixed;left:50%;bottom:20px;transform:translateX(-50%);z-index:60;background:#1f2a44;color:#fff;padding:10px 14px;border-radius:10px;display:flex;gap:12px;align-items:center;font-size:14px;box-shadow:0 6px 20px rgba(0,0,0,.25)";
+undoBar.innerHTML = '<span>Action recorded.</span><button type="button" class="btn btn-sm" id="undo-btn"></button>';
+document.body.appendChild(undoBar);
+let undoTimer = null;
+
+function tickUndo() {
+  const ms = getUndoRemainingMs();
+  if (ms <= 0) { undoBar.hidden = true; clearInterval(undoTimer); return; }
+  $("undo-btn").textContent = `Undo (${Math.ceil(ms / 1000)}s)`;
+}
+function showUndo() {
+  undoBar.hidden = false;
+  tickUndo();
+  clearInterval(undoTimer);
+  undoTimer = setInterval(tickUndo, 500);
+}
+$("undo-btn").addEventListener("click", () => {
+  const result = undoLast();
+  if (!result.ok) { toast(result.reason, "error"); return; }
+  save();
+  undoBar.hidden = true;
+  queueIfOffline("Undo last action");
+  toast("Last action undone.");
+  refreshAll();
+});
+
+function refreshAll() {
+  renderEquipmentPick(); renderChecklistOut(); renderSlip();
+  renderLoanPick(); renderChecklistIn(); renderReturnSlip();
+  const s = findStudent(borrow.studentId);
+  if (s) renderStudentCard(s);
+}
+
 // BORROW
-// =============================================================================
-const borrow = { studentId: null, equipmentId: null, checked: new Set() };
+const borrow = { studentId: null, equipmentId: null, checked: new Set(), override: false, pinTries: 0 };
 
 $("student-options").innerHTML = students
   .map((s) => `<option value="${s.studentNo}">${escapeHtml(s.name)}</option>`).join("");
@@ -39,17 +142,10 @@ function findStudentFromInput() {
   return findStudentByNumber(q) || students.find((s) => s.name.toLowerCase().includes(q));
 }
 
-function selectStudent() {
-  const student = findStudentFromInput();
-  if (!student) {
-    borrow.studentId = null;
-    $("student-result").innerHTML = '<p class="hint" style="color:var(--red);margin-top:10px">No student found with that number or name.</p>';
-    renderSlip();
-    return;
-  }
-  borrow.studentId = student.id;
+function renderStudentCard(student) {
   const open = transactions.filter((t) => t.studentId === student.id && !t.returnedAt);
-  const overdue = open.filter((t) => loanStatus(t) === "overdue").length;
+  const overdue = overdueLoans(student.id).length;
+  const locked = isLockedOut(student.id) && !borrow.override;
   $("student-result").innerHTML = `
     <div class="person">
       <div class="avatar">${initials(student.name)}</div>
@@ -58,13 +154,52 @@ function selectStudent() {
         <div class="cell-sub"><span class="mono">${student.studentNo}</span> · ${escapeHtml(student.course)}, Year ${student.year}</div>
       </div>
       ${overdue ? `<span class="tag red">${overdue} overdue</span>` : `<span class="tag plain">${open.length} open loan${open.length === 1 ? "" : "s"}</span>`}
-    </div>`;
+    </div>
+    ${locked ? `
+      <div style="margin-top:12px;padding:12px;border:1px solid var(--red);border-radius:10px;background:#fdeeee">
+        <strong>Borrowing is blocked.</strong> This student has ${overdue} overdue loan${overdue === 1 ? "" : "s"}.
+        Return them first, or a supervisor can unlock one borrow with a one-time code.
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <input class="input mono" id="ovr-code" placeholder="OVR-1234" autocomplete="off">
+          <button class="btn" type="button" id="ovr-apply">Unlock</button>
+        </div>
+        <button class="btn btn-ghost btn-sm" type="button" id="ovr-make" style="margin-top:6px">Supervisor: generate a code</button>
+      </div>` : ""}
+    ${isLockedOut(student.id) && borrow.override ? '<p class="hint" style="color:var(--green,#1a7f37);margin-top:10px">Override accepted. One borrow is allowed.</p>' : ""}`;
+
+  if (locked) {
+    $("ovr-apply").onclick = () => {
+      if (useOverrideCode($("ovr-code").value)) {
+        borrow.override = true;
+        toast("Override accepted for one borrow.");
+        renderStudentCard(student);
+        renderSlip();
+      } else {
+        toast("That code is invalid or already used.", "error");
+      }
+    };
+    $("ovr-make").onclick = () => toast(`Supervisor code: ${createOverrideCode()} (works once)`);
+  }
+}
+
+function selectStudent() {
+  const student = findStudentFromInput();
+  if (!student) {
+    borrow.studentId = null;
+    $("student-result").innerHTML = '<p class="hint" style="color:var(--red);margin-top:10px">No student found with that number or name.</p>';
+    renderSlip();
+    return;
+  }
+  if (borrow.studentId !== student.id) { borrow.override = false; borrow.pinTries = 0; $("pin").value = ""; }
+  borrow.studentId = student.id;
+  renderStudentCard(student);
   renderSlip();
 }
 
 $("find-student").addEventListener("click", selectStudent);
 $("student-search").addEventListener("keydown", (e) => { if (e.key === "Enter") selectStudent(); });
 $("student-search").addEventListener("change", selectStudent);
+$("pin").addEventListener("input", renderSlip);
 
 function renderEquipmentPick() {
   const q = $("equip-search").value.trim().toLowerCase();
@@ -80,18 +215,24 @@ function renderEquipmentPick() {
     </li>`).join("") || '<li class="empty">No equipment found.</li>';
 }
 
-$("equip-search").addEventListener("input", renderEquipmentPick);
-$("equip-pick").addEventListener("click", (e) => {
-  const li = e.target.closest("[data-id]");
-  if (!li || li.getAttribute("aria-disabled") === "true") return;
-  borrow.equipmentId = li.dataset.id;
+function chooseEquipment(id) {
+  const item = findEquipment(id);
+  if (!item) return;
+  if (item.available === 0) { toast(`${item.name} is out of stock.`, "error"); return; }
+  borrow.equipmentId = id;
   borrow.checked = new Set();
-  const item = findEquipment(borrow.equipmentId);
   $("qty").max = item.available;
   if (Number($("qty").value) > item.available) $("qty").value = item.available;
   renderEquipmentPick();
   renderChecklistOut();
   renderSlip();
+}
+
+$("equip-search").addEventListener("input", renderEquipmentPick);
+$("equip-pick").addEventListener("click", (e) => {
+  const li = e.target.closest("[data-id]");
+  if (!li || li.getAttribute("aria-disabled") === "true") return;
+  chooseEquipment(li.dataset.id);
 });
 
 function renderChecklistOut() {
@@ -130,19 +271,41 @@ function validateBorrow() {
   const item = findEquipment(borrow.equipmentId);
   const qty = Number($("qty").value);
   if (!borrow.studentId) return "Find the student first.";
+  if (isLockedOut(borrow.studentId) && !borrow.override) return "Blocked: this student has an overdue loan.";
   if (!item) return "Choose the equipment being borrowed.";
   if (!Number.isInteger(qty) || qty < 1) return "Quantity must be at least 1.";
   if (qty > item.available) return `Only ${item.available} available.`;
   if (!dueInput.value || daysUntil(dueInput.value + "T12:00") < 0) return "Pick a due date from today onward.";
   if (borrow.checked.size < item.components.length) return "Tick every component before handing it over.";
+  if (!/^\d{4}$/.test($("pin").value)) return "Enter the student's 4-digit PIN.";
   return "";
 }
 
 $("confirm-borrow").addEventListener("click", () => {
   const problem = validateBorrow();
   if (problem) { toast(problem, "error"); return; }
+
+  // PIN check
+  if (!checkPin(borrow.studentId, $("pin").value)) {
+    borrow.pinTries += 1;
+    $("pin").value = "";
+    if (borrow.pinTries >= 3) {
+      toast("Too many wrong PINs. Start again with the student's ID.", "error");
+      Object.assign(borrow, { studentId: null, override: false, pinTries: 0 });
+      $("student-search").value = "";
+      $("student-result").innerHTML = "";
+      renderSlip();
+    } else {
+      toast(`Wrong PIN (${borrow.pinTries} of 3).`, "error");
+      renderSlip();
+    }
+    return;
+  }
+
   const item = findEquipment(borrow.equipmentId);
   const qty = Number($("qty").value);
+  const availableBefore = item.available;
+  const conditionBefore = item.condition;
   const tx = {
     id: `tx-${Math.max(...transactions.map((t) => Number(t.id.slice(3)))) + 1}`,
     studentId: borrow.studentId,
@@ -157,34 +320,62 @@ $("confirm-borrow").addEventListener("click", () => {
   };
   transactions.unshift(tx);
   item.available -= qty;
-  toast(`${tx.id.toUpperCase()} recorded: ${item.name} × ${qty} (preview only, not saved).`);
+
+  recordAction({ type: "borrow", txId: tx.id, equipmentId: item.id, availableBefore, conditionBefore });
+  save();
+  queueIfOffline(`Borrow ${tx.id.toUpperCase()}: ${item.name} × ${qty}`);
+  showUndo();
+  toast(`${tx.id.toUpperCase()} recorded: ${item.name} × ${qty}.`);
 
   // Reset for the next borrower.
-  Object.assign(borrow, { studentId: null, equipmentId: null, checked: new Set() });
+  Object.assign(borrow, { studentId: null, equipmentId: null, checked: new Set(), override: false, pinTries: 0 });
   $("student-search").value = "";
   $("student-result").innerHTML = "";
   $("equip-search").value = "";
   $("qty").value = 1;
   $("notes").value = "";
+  $("pin").value = "";
   renderEquipmentPick();
   renderChecklistOut();
   renderSlip();
   renderLoanPick();
 });
 
-// =============================================================================
+// Scan: student ID (QR holds the student number, e.g. 2024-00117) 
+scanButtons[0]?.addEventListener("click", async () => {
+  const code = await scanCode("Scan the student ID");
+  if (!code) return;
+  $("student-search").value = code;
+  selectStudent();
+});
+
+// Scan: tool (QR holds the asset tag, e.g. SV-EQ-0009)
+const scanToolBtn = document.createElement("button");
+scanToolBtn.type = "button";
+scanToolBtn.className = "btn btn-sm";
+scanToolBtn.textContent = "Scan tool QR";
+scanToolBtn.style.margin = "10px 0 0";
+$("equip-search").closest(".input-icon").insertAdjacentElement("afterend", scanToolBtn);
+scanToolBtn.addEventListener("click", async () => {
+  const code = await scanCode("Scan the tool's QR sticker");
+  if (!code) return;
+  const item = equipment.find((e) => e.tag.toLowerCase() === code.toLowerCase());
+  if (!item) { toast(`No tool with code "${code}". Try typing it in the search box.`, "error"); return; }
+  chooseEquipment(item.id);
+});
+
 // RETURN
-// =============================================================================
 const ret = { txId: null, checked: new Set() };
+const currentLoan = () => transactions.find((t) => t.id === ret.txId);
 
 function renderLoanPick() {
   const q = $("loan-search").value.trim().toLowerCase();
   const open = transactions
     .filter((t) => !t.returnedAt)
-    .sort((a, b) => new Date(a.dueAt) - new Date(b.dueAt))
+    .sort(byDue)
     .filter((t) => {
       const s = findStudent(t.studentId); const e = findEquipment(t.equipmentId);
-      return !q || `${s.name} ${s.studentNo} ${e?.name} ${t.id}`.toLowerCase().includes(q);
+      return !q || `${s.name} ${s.studentNo} ${e?.name} ${e?.tag} ${t.id}`.toLowerCase().includes(q);
     });
   $("loan-pick").innerHTML = open.map((t) => {
     const s = findStudent(t.studentId); const e = findEquipment(t.equipmentId);
@@ -199,62 +390,82 @@ function renderLoanPick() {
   }).join("") || '<li class="empty">No open loans.</li>';
 }
 
-$("loan-search").addEventListener("input", renderLoanPick);
-$("loan-pick").addEventListener("click", (e) => {
-  const li = e.target.closest("[data-id]");
-  if (!li) return;
-  ret.txId = li.dataset.id;
+function selectLoan(id) {
+  ret.txId = id;
   ret.checked = new Set();
   renderLoanPick();
   renderChecklistIn();
   renderReturnSlip();
+}
+
+$("loan-search").addEventListener("input", renderLoanPick);
+$("loan-pick").addEventListener("click", (e) => {
+  const li = e.target.closest("[data-id]");
+  if (li) selectLoan(li.dataset.id);
 });
 
 function renderChecklistIn() {
-  const tx = transactions.find((t) => t.id === ret.txId);
+  const tx = currentLoan();
   $("return-empty").hidden = Boolean(tx);
   if (!tx) { $("checklist-in").innerHTML = ""; $("return-count").textContent = ""; return; }
-  $("checklist-in").innerHTML = tx.checklistOut.map((c, i) => `
+  const parts = partsToCheck(tx);
+  $("checklist-in").innerHTML = parts.map((c, i) => `
     <li><label><input type="checkbox" data-part="${i}" ${ret.checked.has(c) ? "checked" : ""}> ${escapeHtml(c)}</label></li>`).join("");
-  $("return-count").textContent = `${ret.checked.size} / ${tx.checklistOut.length} returned`;
+  $("return-count").textContent = `${ret.checked.size} / ${parts.length} returned`;
 }
 
 $("checklist-in").addEventListener("change", (e) => {
-  const tx = transactions.find((t) => t.id === ret.txId);
-  const part = tx.checklistOut[Number(e.target.dataset.part)];
+  const tx = currentLoan();
+  const parts = partsToCheck(tx);
+  const part = parts[Number(e.target.dataset.part)];
   e.target.checked ? ret.checked.add(part) : ret.checked.delete(part);
-  $("return-count").textContent = `${ret.checked.size} / ${tx.checklistOut.length} returned`;
+  $("return-count").textContent = `${ret.checked.size} / ${parts.length} returned`;
   renderReturnSlip();
 });
 
 function renderReturnSlip() {
-  const tx = transactions.find((t) => t.id === ret.txId);
+  const tx = currentLoan();
   if (!tx) { $("return-slip").innerHTML = '<dt>Loan</dt><dd class="muted">—</dd>'; return; }
   const s = findStudent(tx.studentId); const e = findEquipment(tx.equipmentId);
-  const missing = tx.checklistOut.length - ret.checked.size;
+  const parts = partsToCheck(tx);
+  const missing = parts.length - [...ret.checked].filter((p) => parts.includes(p)).length;
+  const earlier = tx.missing?.length ? `<dt>History</dt><dd><span class="tag amber">Earlier return was incomplete</span></dd>` : "";
   $("return-slip").innerHTML = `
     <dt>Ref</dt><dd><span class="code-tag">${tx.id.toUpperCase()}</span></dd>
     <dt>Student</dt><dd>${escapeHtml(s.name)}</dd>
     <dt>Item</dt><dd>${escapeHtml(e?.name ?? "Deleted item")} × ${tx.quantity}</dd>
     <dt>Due</dt><dd>${formatDate(tx.dueAt)} ${statusTag(tx)}</dd>
+    ${earlier}
     <dt>Missing</dt><dd>${missing ? `<span class="tag amber">${missing} part${missing === 1 ? "" : "s"}</span>` : '<span class="tag green">None</span>'}</dd>`;
 }
 
 $("confirm-return").addEventListener("click", () => {
-  const tx = transactions.find((t) => t.id === ret.txId);
+  const tx = currentLoan();
   if (!tx) { toast("Select the loan being returned.", "error"); return; }
-  const missing = tx.checklistOut.filter((c) => !ret.checked.has(c));
-  if (missing.length && !confirm(`${missing.length} part(s) not ticked:\n• ${missing.join("\n• ")}\n\nRecord the return as incomplete?`)) return;
+  const parts = partsToCheck(tx);
+  const missing = parts.filter((c) => !ret.checked.has(c));
+  if (missing.length && !confirm(
+    `${missing.length} part(s) not ticked:\n• ${missing.join("\n• ")}\n\n` +
+    "Mark this return as INCOMPLETE?\nThe loan stays open under the student's name until the missing part is brought back."
+  )) return;
 
-  tx.returnedAt = new Date().toISOString();
-  tx.checklistIn = [...ret.checked];
-  tx.notes = [tx.notes, $("return-notes").value.trim()].filter(Boolean).join(" · ");
   const item = findEquipment(tx.equipmentId);
-  if (item) {
-    item.available = Math.min(item.total, item.available + tx.quantity);
-    if ($("return-condition").value !== "Good") item.condition = $("return-condition").value;
-  }
-  toast(`${tx.id.toUpperCase()} returned${missing.length ? " with missing parts" : ""} (preview only, not saved).`);
+  const before = {
+    txBefore: JSON.parse(JSON.stringify(tx)),
+    availableBefore: item?.available,
+    conditionBefore: item?.condition,
+  };
+  const result = applyReturn(tx, [...ret.checked], {
+    condition: $("return-condition").value,
+    notes: $("return-notes").value.trim(),
+  });
+
+  recordAction({ type: "return", txId: tx.id, equipmentId: tx.equipmentId, ...before });
+  save();
+  queueIfOffline(`${result.complete ? "Return" : "Incomplete return"} ${tx.id.toUpperCase()}`);
+  showUndo();
+  if (result.complete) toast(`${tx.id.toUpperCase()} returned complete.`);
+  else toast(`${tx.id.toUpperCase()} is INCOMPLETE. ${result.missing.length} part(s) still missing.`, "error");
 
   Object.assign(ret, { txId: null, checked: new Set() });
   $("return-notes").value = "";
@@ -265,10 +476,23 @@ $("confirm-return").addEventListener("click", () => {
   renderEquipmentPick();
 });
 
-// Initial render -------------------------------------------------------------------
+// Scan: tool on return
+scanButtons[1]?.addEventListener("click", async () => {
+  const code = await scanCode("Scan the tool being returned");
+  if (!code) return;
+  const item = equipment.find((e) => e.tag.toLowerCase() === code.toLowerCase());
+  if (!item) { toast(`No tool with code "${code}".`, "error"); return; }
+  const loans = transactions.filter((t) => !t.returnedAt && t.equipmentId === item.id).sort(byDue);
+  if (!loans.length) { toast("No open loan for that tool.", "error"); return; }
+  selectLoan(loans[0].id);
+  if (loans.length > 1) toast(`${loans.length} open loans for this tool. Showing the earliest due.`);
+});
+
+// Initial render 
 renderEquipmentPick();
 renderChecklistOut();
 renderSlip();
 renderLoanPick();
 renderReturnSlip();
+renderOffline();
 if (location.hash === "#return") setMode("return");
