@@ -1,11 +1,9 @@
-// =============================================================================
-// app.js — shared helpers used by every page
-// -----------------------------------------------------------------------------
-// • renderShell()  draws the sidebar + preview banner so each HTML page stays short
-// • icon()         small inline SVG icon set
-// • date + status helpers for loans
-// • toast() and modal helpers
-// =============================================================================
+/* app.js — shared helpers used by every page
+-----------------------------------------------------------------------------
+• renderShell()  draws the sidebar + preview banner so each HTML page stays short
+• icon()         small inline SVG icon set
+• date + status helpers for loans
+• toast() and modal helpers */
 
 import { admins, students, previewStudentId } from "./sample-data.js";
 
