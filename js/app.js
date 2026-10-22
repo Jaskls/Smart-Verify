@@ -1,13 +1,14 @@
-/* app.js — shared helpers used by every page
------------------------------------------------------------------------------
+/* [app.js: shared helpers used by every page]
+
 • renderShell()  draws the sidebar + preview banner so each HTML page stays short
 • icon()         small inline SVG icon set
 • date + status helpers for loans
 • toast() and modal helpers */
 
 import { admins, students, previewStudentId } from "./sample-data.js";
+import "./store.js"; // loads saved data into the sample-data arrays (see store.js)
 
-// Icons ------------------------------------------------------------------------
+// Icons 
 const ICONS = {
   logo: '<path d="M4 12.5l5 5L20 6.5" stroke-width="2.6"/>',
   dashboard: '<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>',
@@ -34,7 +35,7 @@ export function icon(name) {
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ""}</svg>`;
 }
 
-// Navigation -------------------------------------------------------------------
+// Navigation 
 const NAV = {
   admin: [
     { href: "dashboard.html", label: "Dashboard", icon: "dashboard" },
@@ -47,9 +48,8 @@ const NAV = {
     { href: "equipment.html?view=student", label: "Browse Equipment", icon: "box" },
   ],
 };
-
-// In Stage 1 the role is just remembered in the browser tab so the preview
-// can switch between views. Stage 3 replaces this with real Supabase Auth.
+/* In Stage 1 the role is just remembered in the browser tab so the preview
+can switch between views. Stage 3 replaces this with real Supabase Auth. */
 export function getPreviewRole() {
   const fromUrl = new URLSearchParams(location.search).get("view");
   if (fromUrl === "student") return "student";
@@ -125,8 +125,7 @@ export function renderShell({ role = "admin", active }) {
   });
 }
 
-// Text safety ------------------------------------------------------------------
-// Always escape user-typed text before putting it inside innerHTML.
+// Text safety: Always escape user-typed text before putting it inside innerHTML.
 export function escapeHtml(value) {
   return String(value ?? "")
     .replace(/&/g, "&amp;")
@@ -136,7 +135,7 @@ export function escapeHtml(value) {
     .replace(/'/g, "&#39;");
 }
 
-// Dates ------------------------------------------------------------------------
+// Dates 
 export function formatDate(iso) {
   return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 }
@@ -158,7 +157,7 @@ export function toDateInputValue(date) {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
-// Loan status ------------------------------------------------------------------
+// Loan status
 export function loanStatus(tx) {
   if (tx.returnedAt) return "returned";
   return daysUntil(tx.dueAt) < 0 ? "overdue" : "active";
@@ -172,13 +171,16 @@ export function statusTag(tx) {
       ? '<span class="tag green">Returned</span>'
       : '<span class="tag amber">Returned · incomplete</span>';
   }
+  // An incomplete return keeps the loan open; show what is still missing.
+  const missingTag = tx.missing && tx.missing.length
+    ? ` <span class="tag amber">Missing ${tx.missing.length}</span>` : "";
   if (status === "overdue") {
     const d = Math.abs(daysUntil(tx.dueAt));
-    return `<span class="tag red">Overdue ${d}d</span>`;
+    return `<span class="tag red">Overdue ${d}d</span>${missingTag}`;
   }
   const d = daysUntil(tx.dueAt);
-  if (d === 0) return '<span class="tag amber">Due today</span>';
-  return `<span class="tag blue">Due in ${d}d</span>`;
+  if (d === 0) return `<span class="tag amber">Due today</span>${missingTag}`;
+  return `<span class="tag blue">Due in ${d}d</span>${missingTag}`;
 }
 
 export function stockTag(item) {
@@ -199,7 +201,7 @@ export function equipmentThumb(item) {
     : escapeHtml(initials(item.name));
 }
 
-// Toasts -----------------------------------------------------------------------
+// Toasts
 export function toast(message, type = "success") {
   let stack = document.querySelector(".toast-stack");
   if (!stack) {
@@ -215,7 +217,7 @@ export function toast(message, type = "success") {
   setTimeout(() => el.remove(), 3800);
 }
 
-// Modals (native <dialog>) ------------------------------------------------------
+// Modals (native <dialog>)
 export function openModal(dialog) {
   dialog.showModal();
 }
