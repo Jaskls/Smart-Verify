@@ -1,5 +1,5 @@
 // Admin dashboard — summary of stock and loans.
-import { equipment, transactions, findEquipment, findStudent } from "../sample-data.js";
+import { equipment, transactions, findEquipment, getTransactionStudent } from "../sample-data.js";
 import {
   renderShell, setPreviewRole, escapeHtml, formatDate, daysUntil,
   loanStatus, statusTag, equipmentThumb,
@@ -37,13 +37,13 @@ const attention = [...open].sort((a, b) => new Date(a.dueAt) - new Date(b.dueAt)
 document.getElementById("attention-list").innerHTML = attention.length
   ? attention.map((tx) => {
       const item = findEquipment(tx.equipmentId);
-      const student = findStudent(tx.studentId);
+      const student = getTransactionStudent(tx);
       return `
         <li>
           <div class="thumb">${equipmentThumb(item)}</div>
           <div class="grow">
             <div class="cell-main">${escapeHtml(item.name)} × ${tx.quantity}</div>
-            <div class="cell-sub">${escapeHtml(student.name)} · due ${formatDate(tx.dueAt)}</div>
+            <div class="cell-sub">${escapeHtml(student.name)}${student.former ? " · Former student" : ""} · due ${formatDate(tx.dueAt)}</div>
           </div>
           ${statusTag(tx)}
         </li>`;
@@ -66,14 +66,16 @@ document.getElementById("stock-list").innerHTML = byStock.map((item) => {
 }).join("");
 
 // Recent activity ---------------------------------------------------------------
-const recent = [...transactions].sort((a, b) => new Date(b.borrowedAt) - new Date(a.borrowedAt)).slice(0, 6);
+const recent = transactions
+  .sort((a, b) => new Date(b.borrowedAt) - new Date(a.borrowedAt))
+  .slice(0, 6);
 document.getElementById("recent-body").innerHTML = recent.map((tx) => {
   const item = findEquipment(tx.equipmentId);
-  const student = findStudent(tx.studentId);
+  const student = getTransactionStudent(tx);
   return `
     <tr>
       <td><span class="code-tag">${tx.id.toUpperCase()}</span></td>
-      <td><div class="cell-main">${escapeHtml(student.name)}</div><div class="cell-sub mono">${student.studentNo}</div></td>
+      <td><div class="cell-main">${escapeHtml(student.name)}${student.former ? ' <span class="tag plain">Former student</span>' : ""}</div><div class="cell-sub mono">${escapeHtml(student.studentNo || "Student ID unavailable")}</div></td>
       <td>${escapeHtml(item.name)}</td>
       <td class="mono">${tx.quantity}</td>
       <td>${formatDate(tx.borrowedAt)}<div class="cell-sub">${Math.abs(daysUntil(tx.borrowedAt))}d ago</div></td>

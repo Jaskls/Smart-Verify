@@ -6,7 +6,7 @@
   <title>Equipment · Smart-Verify</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
@@ -64,6 +64,7 @@
     <div class="modal-foot" data-admin-only>
       <button class="btn btn-danger" type="button" id="delete-btn">Delete</button>
       <span style="flex:1"></span>
+      <button class="btn" type="button" id="print-detail-qr">Print QR sticker</button>
       <button class="btn" type="button" id="edit-btn">Edit details</button>
     </div>
   </dialog>
@@ -98,6 +99,16 @@
           <div class="field">
             <label for="f-category">Category</label>
             <select class="select" id="f-category" name="category" required></select>
+          </div>
+          <div class="field span-2" id="qr-queue-field" hidden>
+            <label class="checkbox-field">
+              <input id="add-to-qr-queue" name="addToQrQueue" type="checkbox">
+              <span>Add to QR Print Queue</span>
+            </label>
+          </div>
+          <div class="field" id="custom-category-field" hidden>
+            <label for="f-custom-category">Custom category</label>
+            <input class="input" id="f-custom-category" name="customCategory" placeholder="e.g. Safety equipment">
           </div>
           <div class="field span-2">
             <label for="f-location">Storage location</label>

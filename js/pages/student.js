@@ -24,9 +24,17 @@ document.getElementById("id-card").innerHTML = `
     <p style="margin-top:8px;color:#aeb9ca;font-size:14px">${escapeHtml(me.course)} · Year ${me.year}</p>
   </div>
   <div style="text-align:center">
-    <div class="qr-placeholder" aria-hidden="true"></div>
-    <p style="font-size:11px;color:#8d99ad;margin-top:6px">QR code · Stage 6</p>
+    <div class="student-qr" id="student-qr" role="img" aria-label="Student ID QR code"></div>
+    <p class="student-qr-label">Student ID QR</p>
   </div>`;
+new QRCode(document.getElementById("student-qr"), {
+  text: me.studentNo,
+  width: 92,
+  height: 92,
+  colorDark: "#191a23",
+  colorLight: "#ffffff",
+  correctLevel: QRCode.CorrectLevel.M,
+});
 
 document.getElementById("loan-cards").innerHTML = open.length
   ? open.map((tx) => {
