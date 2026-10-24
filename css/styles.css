@@ -873,9 +873,44 @@ dialog.modal::backdrop { background: rgba(32, 40, 36, 0.4); }
   .app { grid-template-columns: 1fr; }
   .sidebar {
     position: fixed; inset: 0 auto 0 0; width: 260px; z-index: 50;
+    height: 100vh;
+    height: 100dvh;
+    max-height: 100dvh;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    gap: 16px;
+    overflow: hidden;
+    padding-bottom: 0;
     transform: translateX(-100%); transition: transform 0.2s;
   }
   .sidebar.open { transform: none; visibility: visible; box-shadow: 0 0 0 100vmax rgba(32, 40, 36, 0.4); }
+  .sidebar .nav {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  .sidebar-foot {
+    min-height: 0;
+    margin-top: 0;
+    padding: 12px 8px max(12px, env(safe-area-inset-bottom, 0px));
+    background: var(--ink);
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .sidebar-foot .who { flex: 1; }
+  .sidebar-signout {
+    flex: 0 0 100%;
+    min-height: 44px;
+    margin-left: 0;
+    padding: 10px 12px;
+    border: 1px solid var(--ink-3);
+    border-radius: var(--radius-sm);
+    color: #fff;
+    font-size: 14px;
+    text-align: center;
+  }
+  .sidebar-signout:hover { background: var(--ink-2); }
   .page-head, .content { padding-left: 18px; padding-right: 18px; }
   .preview-banner { padding: 8px 18px; }
   .auth { grid-template-columns: 1fr; }
