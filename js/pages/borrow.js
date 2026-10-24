@@ -1,16 +1,14 @@
-/* Borrow & Return workflow.
-Now with: saved data, PIN check, overdue lockout + override code, Incomplete
-returns, Undo (30 s), QR scanning (with typing as backup), offline simulation. */
-import { students, equipment, transactions, findEquipment, findStudent, findStudentByNumber, getTransactionStudent } from "../sample-data.js";
+/* Shared database-backed borrow and return workflow. */
+import { students, equipment, transactions, findEquipment, findStudent, getTransactionStudent } from "../sample-data.js";
 import {
   renderShell, escapeHtml, formatDate, toDateInputValue, daysUntil,
   statusTag, stockTag, equipmentThumb, initials, toast,
 } from "../app.js";
 import { requireProfile } from "../auth.js";
-import { save } from "../store.js";
+import { reloadData } from "../store.js";
+import { getSupabase } from "../supabase.js";
 import {
-  checkPin, isLockedOut, overdueLoans, createOverrideCode, useOverrideCode,
-  partsToCheck, applyReturn, recordAction, undoLast, getUndoRemainingMs,
+  isLockedOut, overdueLoans, partsToCheck,
 } from "../rules.js";
 import { scanCode } from "../scan.js";
 
@@ -20,7 +18,7 @@ renderShell({ profile, active: "borrow.html" });
 const $ = (id) => document.getElementById(id);
 const byDue = (a, b) => new Date(a.dueAt) - new Date(b.dueAt);
 
-// Tabs 
+// Tabs
 const tabs = document.querySelectorAll("[data-mode]");
 function setMode(mode) {
   tabs.forEach((t) => t.setAttribute("aria-selected", String(t.dataset.mode === mode)));
@@ -30,98 +28,11 @@ function setMode(mode) {
 }
 tabs.forEach((t) => t.addEventListener("click", () => setMode(t.dataset.mode)));
 
-// Turn on the controls that used to say "arrives in Stage 6" 
 $("pin").disabled = false;
 $("pin").maxLength = 4;
 $("pin").placeholder = "4-digit PIN";
 const scanButtons = [...document.querySelectorAll('button[title*="QR scanning"]')];
 scanButtons.forEach((b) => { b.disabled = false; b.removeAttribute("title"); });
-
-/* OFFLINE SIMULATION
-Data is always saved on this device. When "offline" is on, each action is also
-listed as "waiting to sync", then "synced" when we go back online. */
-const OFFLINE_KEY = "sv.offline";
-const QUEUE_KEY = "sv.queue";
-const readQueue = () => { try { return JSON.parse(localStorage.getItem(QUEUE_KEY) || "[]"); } catch { return []; } };
-const writeQueue = (q) => { try { localStorage.setItem(QUEUE_KEY, JSON.stringify(q)); } catch { /* ignore */ } };
-const isOffline = () => localStorage.getItem(OFFLINE_KEY) === "1";
-
-const banner = document.createElement("div");
-banner.style.cssText = "display:none;margin-bottom:16px;padding:12px 14px;border-radius:10px;border:1px solid #e0b4b4;background:#fdeeee;color:#7a1f1f;font-size:14px";
-document.querySelector(".content").prepend(banner);
-
-const offlineBtn = document.createElement("button");
-offlineBtn.type = "button";
-offlineBtn.className = "btn btn-sm";
-offlineBtn.style.marginTop = "10px";
-document.querySelector(".page-head > div").appendChild(offlineBtn);
-
-function renderOffline() {
-  const q = readQueue();
-  offlineBtn.textContent = isOffline() ? "Go back online" : "Simulate offline";
-  if (!isOffline()) { banner.style.display = "none"; return; }
-  banner.style.display = "block";
-  banner.innerHTML = `<strong>No connection.</strong> Changes are saved on this device and will sync when the connection returns.
-    <div style="margin-top:6px;font-size:13px">Waiting to sync: <strong>${q.length}</strong></div>
-    ${q.length ? `<ul style="margin:6px 0 0 18px;font-size:13px">${q.map((x) => `<li>${escapeHtml(x.label)}</li>`).join("")}</ul>` : ""}`;
-}
-
-function queueIfOffline(label) {
-  if (!isOffline()) return;
-  writeQueue([...readQueue(), { label, at: new Date().toISOString() }]);
-  renderOffline();
-}
-
-offlineBtn.addEventListener("click", () => {
-  if (!isOffline()) {
-    localStorage.setItem(OFFLINE_KEY, "1");
-    renderOffline();
-    return;
-  }
-  const n = readQueue().length;
-  banner.style.display = "block";
-  banner.style.background = "#fff7e0"; banner.style.borderColor = "#e6d199"; banner.style.color = "#6b5200";
-  banner.innerHTML = `<strong>Back online.</strong> Syncing ${n} change${n === 1 ? "" : "s"}…`;
-  setTimeout(() => {
-    localStorage.removeItem(OFFLINE_KEY);
-    writeQueue([]);
-    banner.style.background = "#fdeeee"; banner.style.borderColor = "#e0b4b4"; banner.style.color = "#7a1f1f";
-    renderOffline();
-    toast(n ? `${n} change${n === 1 ? "" : "s"} synced.` : "Online. Nothing waiting to sync.");
-  }, 1300);
-});
-
-// UNDO BAR (30 seconds after a borrow or return)
-const undoBar = document.createElement("div");
-undoBar.id = "undo-bar";
-undoBar.className = "undo-bar";
-undoBar.hidden = true;
-undoBar.innerHTML = '<span>Action recorded.</span><button type="button" class="btn btn-sm" id="undo-btn"></button>';
-document.body.appendChild(undoBar);
-let undoTimer = null;
-
-function tickUndo() {
-  const ms = getUndoRemainingMs();
-  if (ms <= 0) { undoBar.hidden = true; clearInterval(undoTimer); return; }
-  $("undo-btn").textContent = `Undo (${Math.ceil(ms / 1000)}s)`;
-}
-function showUndo() {
-  undoBar.hidden = false;
-  tickUndo();
-  clearInterval(undoTimer);
-  undoTimer = setInterval(tickUndo, 500);
-}
-$("undo-btn").addEventListener("click", () => {
-  const result = undoLast();
-  if (!result.ok) { toast(result.reason, "error"); return; }
-  save();
-  undoBar.hidden = true;
-  clearInterval(undoTimer);
-  undoTimer = null;
-  queueIfOffline("Undo last action");
-  toast("Last action undone.");
-  refreshAll();
-});
 
 function refreshAll() {
   renderEquipmentPick(); renderChecklistOut(); renderSlip();
@@ -131,78 +42,223 @@ function refreshAll() {
 }
 
 // BORROW
-const borrow = { studentId: null, equipmentId: null, checked: new Set(), override: false, pinTries: 0 };
-
-$("student-options").innerHTML = students
-  .map((s) => `<option value="${s.studentNo}">${escapeHtml(s.name)}</option>`).join("");
+const borrow = { studentId: null, equipmentId: null, checked: new Set(), overrideCode: "" };
 
 const dueInput = $("due");
 dueInput.min = toDateInputValue(new Date());
 dueInput.value = toDateInputValue(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
-function findStudentFromInput() {
-  const q = $("student-search").value.trim().toLowerCase();
-  if (!q) return null;
-  return findStudentByNumber(q) || students.find((s) => s.name.toLowerCase().includes(q));
+function confirmScannedEquipment(item, action) {
+  let dialog = $("equipment-scan-dialog");
+  if (!dialog) {
+    dialog = document.createElement("dialog");
+    dialog.id = "equipment-scan-dialog";
+    dialog.className = "modal";
+    document.body.appendChild(dialog);
+  }
+
+  dialog.innerHTML = `
+    <div class="modal-head">
+      <h2 id="equipment-scan-title">Check scanned equipment</h2>
+      <button class="icon-btn" type="button" data-scan-cancel aria-label="Close">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="scan-equipment-photo"><div class="thumb">${equipmentThumb(item)}</div></div>
+      <div>
+        <h3 class="scan-equipment-name">${escapeHtml(item.name)}</h3>
+        <p class="muted"><span class="mono">${escapeHtml(item.tag)}</span> · ${escapeHtml(item.location || "Location not set")}</p>
+        <p class="muted">${item.available} of ${item.total} available</p>
+        <p><strong>Components:</strong> ${item.components.map(escapeHtml).join(", ") || "None listed"}</p>
+      </div>
+      <p class="muted">${action === "borrow"
+        ? "Confirm this is the equipment being checked out."
+        : "Confirm this is the equipment being returned."}</p>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" type="button" data-scan-cancel>Cancel</button>
+      <button class="btn btn-primary" type="button" data-scan-confirm>Confirm</button>
+    </div>`;
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (confirmed) => {
+      if (settled) return;
+      settled = true;
+      dialog.close();
+      resolve(confirmed);
+    };
+    dialog.querySelectorAll("[data-scan-cancel]").forEach((button) => {
+      button.addEventListener("click", () => finish(false), { once: true });
+    });
+    dialog.querySelector("[data-scan-confirm]").addEventListener("click", () => finish(true), { once: true });
+    dialog.addEventListener("close", () => {
+      if (!settled) {
+        settled = true;
+        resolve(false);
+      }
+    }, { once: true });
+    dialog.showModal();
+  });
+}
+
+function chooseLoanForScannedEquipment(loans) {
+  let dialog = $("return-loan-dialog");
+  if (!dialog) {
+    dialog = document.createElement("dialog");
+    dialog.id = "return-loan-dialog";
+    dialog.className = "modal";
+    document.body.appendChild(dialog);
+  }
+
+  dialog.innerHTML = `
+    <div class="modal-head">
+      <h2>Choose the matching open loan</h2>
+      <button class="icon-btn" type="button" data-loan-cancel aria-label="Close">×</button>
+    </div>
+    <div class="modal-body">
+      <p class="muted">More than one student has this equipment on loan. Select the correct student and loan before recording the return.</p>
+      <ul class="list card" style="box-shadow:none">
+        ${loans.map((loan) => {
+          const student = getTransactionStudent(loan);
+          return `<li>
+            <div class="grow">
+              <div class="cell-main">${escapeHtml(student.name)} · ${loan.quantity} unit${loan.quantity === 1 ? "" : "s"}</div>
+              <div class="cell-sub">${escapeHtml(student.studentNo || "Student ID unavailable")} · due ${formatDate(loan.dueAt)} · ${loan.id.slice(0, 8).toUpperCase()}</div>
+            </div>
+            <button class="btn btn-sm" type="button" data-loan-id="${escapeHtml(loan.id)}">Select</button>
+          </li>`;
+        }).join("")}
+      </ul>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" type="button" data-loan-cancel>Cancel</button>
+    </div>`;
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (loan) => {
+      if (settled) return;
+      settled = true;
+      dialog.close();
+      resolve(loan);
+    };
+    dialog.querySelectorAll("[data-loan-cancel]").forEach((button) => {
+      button.addEventListener("click", () => finish(null), { once: true });
+    });
+    dialog.querySelectorAll("[data-loan-id]").forEach((button) => {
+      button.addEventListener("click", () => {
+        finish(loans.find((loan) => loan.id === button.dataset.loanId) ?? null);
+      }, { once: true });
+    });
+    dialog.addEventListener("close", () => {
+      if (!settled) {
+        settled = true;
+        resolve(null);
+      }
+    }, { once: true });
+    dialog.showModal();
+  });
 }
 
 function renderStudentCard(student) {
   const open = transactions.filter((t) => t.studentId === student.id && !t.returnedAt);
   const overdue = overdueLoans(student.id).length;
-  const locked = isLockedOut(student.id) && !borrow.override;
+  const locked = isLockedOut(student.id);
   $("student-result").innerHTML = `
     <div class="person">
       <div class="avatar">${initials(student.name)}</div>
       <div class="grow" style="flex:1">
         <div class="cell-main">${escapeHtml(student.name)}</div>
-        <div class="cell-sub"><span class="mono">${student.studentNo}</span> · ${escapeHtml(student.course)}, Year ${student.year}</div>
+        <div class="cell-sub"><span class="mono">${escapeHtml(student.studentNo)}</span> · Verified KLD account</div>
       </div>
       ${overdue ? `<span class="tag red">${overdue} overdue</span>` : `<span class="tag plain">${open.length} open loan${open.length === 1 ? "" : "s"}</span>`}
     </div>
     ${locked ? `
       <div style="margin-top:12px;padding:12px;border:1px solid var(--red);border-radius:10px;background:#fdeeee">
         <strong>Borrowing is blocked.</strong> This student has ${overdue} overdue loan${overdue === 1 ? "" : "s"}.
-        Return them first, or a supervisor can unlock one borrow with a one-time code.
+        Return them first, or a supervisor can authorize one borrow with a database-validated one-time code.
         <div style="display:flex;gap:8px;margin-top:10px">
-          <input class="input mono" id="ovr-code" placeholder="OVR-1234" autocomplete="off">
-          <button class="btn" type="button" id="ovr-apply">Unlock</button>
+          <input class="input mono" id="ovr-code" placeholder="OVR-..." autocomplete="off" value="${escapeHtml(borrow.overrideCode)}">
+          <button class="btn" type="button" id="ovr-apply">${borrow.overrideCode ? "Update code" : "Use code"}</button>
         </div>
         <button class="btn btn-ghost btn-sm" type="button" id="ovr-make" style="margin-top:6px">Supervisor: generate a code</button>
       </div>` : ""}
-    ${isLockedOut(student.id) && borrow.override ? '<p class="hint" style="color:var(--green,#1a7f37);margin-top:10px">Override accepted. One borrow is allowed.</p>' : ""}`;
+    ${isLockedOut(student.id) && borrow.overrideCode ? '<p class="hint" style="color:var(--green,#1a7f37);margin-top:10px">Supervisor code entered. It will be validated when checkout is submitted.</p>' : ""}`;
 
   if (locked) {
     $("ovr-apply").onclick = () => {
-      if (useOverrideCode($("ovr-code").value)) {
-        borrow.override = true;
-        toast("Override accepted for one borrow.");
+      const code = $("ovr-code").value.trim().toUpperCase();
+      if (!code) { toast("Enter a supervisor code.", "error"); return; }
+      borrow.overrideCode = code;
+      toast("Supervisor code entered. It will be checked when the borrow is submitted.");
+      renderStudentCard(student);
+      renderSlip();
+    };
+    $("ovr-make").onclick = async () => {
+      const button = $("ovr-make");
+      button.disabled = true;
+      try {
+        const { data, error } = await getSupabase().rpc("create_equipment_loan_override");
+        if (error) throw error;
+        $("ovr-code").value = data;
+        borrow.overrideCode = data;
         renderStudentCard(student);
         renderSlip();
-      } else {
-        toast("That code is invalid or already used.", "error");
+        toast(`Supervisor code generated and entered. It can authorize one checkout.`);
+      } catch (error) {
+        toast(error.message || "Could not create a supervisor code.", "error");
+      } finally {
+        button.disabled = false;
       }
     };
-    $("ovr-make").onclick = () => toast(`Supervisor code: ${createOverrideCode()} (works once)`);
   }
 }
 
-function selectStudent() {
-  const student = findStudentFromInput();
-  if (!student) {
-    borrow.studentId = null;
-    $("student-result").innerHTML = '<p class="hint" style="color:var(--red);margin-top:10px">No student found with that number or name.</p>';
+async function selectStudent() {
+  const query = $("student-search").value.trim();
+  if (!query) return;
+  $("find-student").disabled = true;
+  try {
+    const { data, error } = await getSupabase().functions.invoke("student-pin-auth", {
+      body: { action: "lookup_student", query },
+    });
+    if (error) {
+      if (error.context instanceof Response) {
+        const payload = await error.context.json().catch(() => null);
+        if (typeof payload?.error === "string") throw new Error(payload.error);
+      }
+      throw new Error(error.message || "Could not search student accounts.");
+    }
+    const student = data.student;
+    const existingIndex = students.findIndex((entry) => entry.id === student.id);
+    const studentRecord = {
+      id: student.id,
+      studentNo: student.studentNo,
+      name: student.name,
+      course: "",
+      year: "",
+      email: "",
+    };
+    if (existingIndex < 0) students.push(studentRecord);
+    else students[existingIndex] = studentRecord;
+
+    if (borrow.studentId !== student.id) { borrow.overrideCode = ""; $("pin").value = ""; }
+    borrow.studentId = student.id;
+    renderStudentCard(studentRecord);
     renderSlip();
-    return;
+  } catch (error) {
+    borrow.studentId = null;
+    borrow.overrideCode = "";
+    $("pin").value = "";
+    $("student-result").innerHTML = `<p class="hint" style="color:var(--red);margin-top:10px">${escapeHtml(error.message || "Student search failed.")}</p>`;
+    renderSlip();
+  } finally {
+    $("find-student").disabled = false;
   }
-  if (borrow.studentId !== student.id) { borrow.override = false; borrow.pinTries = 0; $("pin").value = ""; }
-  borrow.studentId = student.id;
-  renderStudentCard(student);
-  renderSlip();
 }
 
 $("find-student").addEventListener("click", selectStudent);
 $("student-search").addEventListener("keydown", (e) => { if (e.key === "Enter") selectStudent(); });
-$("student-search").addEventListener("change", selectStudent);
 $("pin").addEventListener("input", renderSlip);
 
 function renderEquipmentPick() {
@@ -275,7 +331,7 @@ function validateBorrow() {
   const item = findEquipment(borrow.equipmentId);
   const qty = Number($("qty").value);
   if (!borrow.studentId) return "Find the student first.";
-  if (isLockedOut(borrow.studentId) && !borrow.override) return "Blocked: this student has an overdue loan.";
+  if (isLockedOut(borrow.studentId) && !borrow.overrideCode) return "Blocked: this student has an overdue loan.";
   if (!item) return "Choose the equipment being borrowed.";
   if (!Number.isInteger(qty) || qty < 1) return "Quantity must be at least 1.";
   if (qty > item.available) return `Only ${item.available} available.`;
@@ -285,67 +341,64 @@ function validateBorrow() {
   return "";
 }
 
-$("confirm-borrow").addEventListener("click", () => {
+async function verifyStudentPin() {
+  const { data, error } = await getSupabase().functions.invoke("student-pin-auth", {
+    body: {
+      action: "verify_student_pin",
+      student_no: findStudent(borrow.studentId)?.studentNo,
+      pin: $("pin").value,
+    },
+  });
+  if (!error) return data;
+  if (error.context instanceof Response) {
+    const payload = await error.context.json().catch(() => null);
+    if (typeof payload?.error === "string") throw new Error(payload.error);
+  }
+  throw new Error(error.message || "Could not verify the student's PIN.");
+}
+
+$("confirm-borrow").addEventListener("click", async () => {
   const problem = validateBorrow();
   if (problem) { toast(problem, "error"); return; }
 
-  // PIN check
-  if (!checkPin(borrow.studentId, $("pin").value)) {
-    borrow.pinTries += 1;
-    $("pin").value = "";
-    if (borrow.pinTries >= 3) {
-      toast("Too many wrong PINs. Start again with the student's ID.", "error");
-      Object.assign(borrow, { studentId: null, override: false, pinTries: 0 });
-      $("student-search").value = "";
-      $("student-result").innerHTML = "";
-      renderSlip();
-    } else {
-      toast(`Wrong PIN (${borrow.pinTries} of 3).`, "error");
-      renderSlip();
-    }
-    return;
-  }
-
   const item = findEquipment(borrow.equipmentId);
   const qty = Number($("qty").value);
-  const availableBefore = item.available;
-  const conditionBefore = item.condition;
-  const borrower = findStudent(borrow.studentId);
-  const tx = {
-    id: `tx-${Math.max(...transactions.map((t) => Number(t.id.slice(3)))) + 1}`,
-    studentId: borrow.studentId,
-    studentNameSnapshot: borrower.name,
-    studentNoSnapshot: borrower.studentNo,
-    equipmentId: item.id,
-    quantity: qty,
-    borrowedAt: new Date().toISOString(),
-    dueAt: new Date(dueInput.value + "T17:00").toISOString(),
-    returnedAt: null,
-    checklistOut: [...borrow.checked],
-    checklistIn: null,
-    notes: $("notes").value.trim(),
-  };
-  transactions.unshift(tx);
-  item.available -= qty;
-
-  recordAction({ type: "borrow", txId: tx.id, equipmentId: item.id, availableBefore, conditionBefore });
-  save();
-  queueIfOffline(`Borrow ${tx.id.toUpperCase()}: ${item.name} × ${qty}`);
-  showUndo();
-  toast(`${tx.id.toUpperCase()} recorded: ${item.name} × ${qty}.`);
-
-  // Reset for the next borrower.
-  Object.assign(borrow, { studentId: null, equipmentId: null, checked: new Set(), override: false, pinTries: 0 });
-  $("student-search").value = "";
-  $("student-result").innerHTML = "";
-  $("equip-search").value = "";
-  $("qty").value = 1;
-  $("notes").value = "";
-  $("pin").value = "";
-  renderEquipmentPick();
-  renderChecklistOut();
-  renderSlip();
-  renderLoanPick();
+  $("confirm-borrow").disabled = true;
+  try {
+    await verifyStudentPin();
+    const { data, error } = await getSupabase().rpc("create_equipment_loan", {
+      p_student_id: borrow.studentId,
+      p_equipment_id: item.id,
+      p_quantity: qty,
+      p_due_at: new Date(dueInput.value + "T17:00").toISOString(),
+      p_checklist_out: item.components,
+      p_notes: $("notes").value.trim(),
+      p_override_code: borrow.overrideCode || null,
+    });
+    if (error) throw error;
+    Object.assign(borrow, { studentId: null, equipmentId: null, checked: new Set(), overrideCode: "" });
+    $("student-search").value = "";
+    $("student-result").innerHTML = "";
+    $("equip-search").value = "";
+    $("qty").value = 1;
+    $("notes").value = "";
+    $("pin").value = "";
+    try {
+      refreshAll();
+      await reloadData();
+      refreshAll();
+      toast(`Loan ${data.id.slice(0, 8).toUpperCase()} recorded in Supabase: ${item.name} × ${qty}.`);
+    } catch (refreshError) {
+      toast(`Loan ${data.id.slice(0, 8).toUpperCase()} was saved, but the page could not refresh. Reload before recording another loan. ${refreshError.message || ""}`, "error");
+    }
+  } catch (error) {
+    $("pin").value = "";
+    renderSlip();
+    toast(error.message || "Could not record the loan.", "error");
+    return;
+  } finally {
+    $("confirm-borrow").disabled = false;
+  }
 });
 
 // Scan: student ID (QR holds the student number, e.g. 2024-00117) 
@@ -368,6 +421,7 @@ scanToolBtn.addEventListener("click", async () => {
   if (!code) return;
   const item = equipment.find((e) => e.tag.toLowerCase() === code.toLowerCase());
   if (!item) { toast(`No tool with code "${code}". Try typing it in the search box.`, "error"); return; }
+  if (!await confirmScannedEquipment(item, "borrow")) return;
   chooseEquipment(item.id);
 });
 
@@ -446,7 +500,7 @@ function renderReturnSlip() {
     <dt>Missing</dt><dd>${missing ? `<span class="tag amber">${missing} part${missing === 1 ? "" : "s"}</span>` : '<span class="tag green">None</span>'}</dd>`;
 }
 
-$("confirm-return").addEventListener("click", () => {
+$("confirm-return").addEventListener("click", async () => {
   const tx = currentLoan();
   if (!tx) { toast("Select the loan being returned.", "error"); return; }
   const parts = partsToCheck(tx);
@@ -456,31 +510,34 @@ $("confirm-return").addEventListener("click", () => {
     "Mark this return as INCOMPLETE?\nThe loan stays open under the student's name until the missing part is brought back."
   )) return;
 
-  const item = findEquipment(tx.equipmentId);
-  const before = {
-    txBefore: JSON.parse(JSON.stringify(tx)),
-    availableBefore: item?.available,
-    conditionBefore: item?.condition,
-  };
-  const result = applyReturn(tx, [...ret.checked], {
-    condition: $("return-condition").value,
-    notes: $("return-notes").value.trim(),
-  });
-
-  recordAction({ type: "return", txId: tx.id, equipmentId: tx.equipmentId, ...before });
-  save();
-  queueIfOffline(`${result.complete ? "Return" : "Incomplete return"} ${tx.id.toUpperCase()}`);
-  showUndo();
-  if (result.complete) toast(`${tx.id.toUpperCase()} returned complete.`);
-  else toast(`${tx.id.toUpperCase()} is INCOMPLETE. ${result.missing.length} part(s) still missing.`, "error");
-
-  Object.assign(ret, { txId: null, checked: new Set() });
-  $("return-notes").value = "";
-  $("return-condition").value = "Good";
-  renderLoanPick();
-  renderChecklistIn();
-  renderReturnSlip();
-  renderEquipmentPick();
+  const returnedParts = [...new Set([...(tx.checklistIn ?? []), ...ret.checked])];
+  $("confirm-return").disabled = true;
+  try {
+    const { data, error } = await getSupabase().rpc("record_equipment_return", {
+      p_loan_id: tx.id,
+      p_checklist_in: returnedParts,
+      p_condition: $("return-condition").value,
+      p_notes: $("return-notes").value.trim(),
+    });
+    if (error) throw error;
+    Object.assign(ret, { txId: null, checked: new Set() });
+    $("return-notes").value = "";
+    $("return-condition").value = "Good";
+    try {
+      refreshAll();
+      await reloadData();
+      refreshAll();
+      if (data.returned_at) toast(`${tx.id.slice(0, 8).toUpperCase()} returned complete.`);
+      else toast(`${tx.id.slice(0, 8).toUpperCase()} is INCOMPLETE. ${data.missing.length} part(s) still missing.`, "error");
+    } catch (refreshError) {
+      toast(`Return for ${tx.id.slice(0, 8).toUpperCase()} was saved, but the page could not refresh. Reload before recording another return. ${refreshError.message || ""}`, "error");
+    }
+  } catch (error) {
+    toast(error.message || "Could not record the return.", "error");
+    return;
+  } finally {
+    $("confirm-return").disabled = false;
+  }
 });
 
 // Scan: tool on return
@@ -491,8 +548,9 @@ scanButtons[1]?.addEventListener("click", async () => {
   if (!item) { toast(`No tool with code "${code}".`, "error"); return; }
   const loans = transactions.filter((t) => !t.returnedAt && t.equipmentId === item.id).sort(byDue);
   if (!loans.length) { toast("No open loan for that tool.", "error"); return; }
-  selectLoan(loans[0].id);
-  if (loans.length > 1) toast(`${loans.length} open loans for this tool. Showing the earliest due.`);
+  if (!await confirmScannedEquipment(item, "return")) return;
+  const loan = loans.length === 1 ? loans[0] : await chooseLoanForScannedEquipment(loans);
+  if (loan) selectLoan(loan.id);
 });
 
 // Initial render 
@@ -501,7 +559,6 @@ renderChecklistOut();
 renderSlip();
 renderLoanPick();
 renderReturnSlip();
-renderOffline();
 // Show the right tab on load, and again whenever the address changes
 // (e.g. clicking a "#return" link while already on this page, or the sidebar link).
 const modeFromHash = () => (location.hash === "#return" ? "return" : "borrow");

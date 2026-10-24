@@ -1,7 +1,7 @@
 /* Service worker: lets Smart-Verify open and run with no internet.
 Every page, script, picture and the scanner library is saved the first time it loads,
 then served from the device when the Wi-Fi is down. Bump CACHE when you change files. */
-const CACHE = "smart-verify-v8";
+const CACHE = "smart-verify-v9";
 
 self.addEventListener("install", (e) => { self.skipWaiting(); });
 self.addEventListener("activate", (e) => {

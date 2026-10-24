@@ -25,24 +25,26 @@ in with an approved email and password.
 
 ## Current project status
 
-Supabase is currently used for account authentication and profiles. Equipment,
-student, and borrowing records are still sample data saved in the browser;
-they are not shared between devices or stored in Supabase. Equipment photos
-and the QR print queue are also browser-local.
+Supabase stores accounts, student PIN credentials, equipment inventory, and
+borrow/return transactions. Inventory changes and loan records are shared
+between signed-in staff and students. Equipment photo selection is currently a
+local preview only; the QR print queue is saved in this browser.
+Overdue-loan checks are enforced by the database. Administrators can generate
+one-use supervisor codes for an approved exception; those codes are stored and
+consumed in Supabase.
 
 Student self-registration checks that the student can verify a `@kld.edu.ph`
 email, but it does **not** verify that their entered name or Student ID matches
-official school records. Do not use the current sample inventory and borrowing
-data as a production source of truth.
+official school records. Confirm each student's identity and Student ID at
+the counter before issuing equipment.
 
 ## Technologies
 
 - **HTML, CSS, and vanilla JavaScript** using native ES modules; no build step.
-- **Supabase** for authentication, account profiles, and the student PIN
-  function.
+- **Supabase** for authentication, profiles, shared inventory and loans, and
+  the student PIN function.
 - **Netlify** for static hosting and deployment from GitHub.
-- **Browser localStorage** for sample inventory changes, transactions, theme
-  preference, and QR print queue.
+- **Browser localStorage** for theme preference and QR print queue.
 
 ## Project structure
 
@@ -59,16 +61,19 @@ css/styles.css                     Application styles
 js/app.js                          Shared layout and UI helpers
 js/auth.js                         Profile access and role checks
 js/supabase.js                     Supabase client configuration
-js/sample-data.js                  Example inventory, students, and loans
-js/store.js                        Browser storage for sample records
+js/sample-data.js                  Initial UI data shapes and demo fixtures
+js/store.js                        Supabase data loading and equipment writes
 js/scan.js                         Camera QR scanning
 js/qr-queue.js                     Browser-local sticker queue
 js/pages/*.js                      Page-specific behavior
-supabase-setup.sql                 Supabase tables, policies, and triggers
+supabase-setup.sql                 Supabase account, inventory, and loan schema
 supabase/functions/student-pin-auth/index.ts
                                    Student PIN setup and sign-in
 netlify.toml                       Static hosting configuration
 ```
+
+Camera scanning requires HTTPS or localhost and permission to use the camera.
+You can also host the static site with Netlify.
 
 ## Run locally
 
@@ -80,28 +85,29 @@ python -m http.server 8000
 ```
 
 Then open [http://localhost:8000](http://localhost:8000).
-## Photos, scanning and offline
-- **Equipment photos:** each sample item has a picture in `images/equipment/`. Admins can upload their own
-  photo when adding or editing equipment (it is shrunk and saved in the browser). Staff see a large
-  photo pop-up and must tap Confirm after scanning a tool, on both borrow and return.
-- **Scanner:** `js/scan.js` reads QR codes and common barcodes (Code 128/39, EAN, UPC) with the camera.
-- **Borrow timer:** open loans show a live count of how long the tool has been out.
-- **Offline:** `sw.js` saves the app on the device so it opens without internet. Borrows and returns are
-  saved on the device and listed as waiting to sync, then sync when the connection returns.
-
-## Run it locally
-ES modules don't load from `file://`, so serve the folder with any static server:
-
-Camera scanning requires HTTPS or localhost and permission to use the camera.
-You can also host the static site with Netlify.
 
 ## Supabase setup
 
-To run the app with Supabase authentication, configure the project URL and
-publishable key in `js/supabase.js`, run `supabase-setup.sql` in the Supabase
-SQL Editor, and deploy the `student-pin-auth` Edge Function. Keep service-role
-keys, SMTP credentials, and other private secrets in Supabase—not in frontend
-code or GitHub.
+Configure the project URL and publishable key in `js/supabase.js`, then run
+the latest `supabase-setup.sql` in the Supabase SQL Editor. This creates and
+seeds the example equipment inventory, creates shared loan tables and secure
+checkout/return database functions, and updates account policies. Existing
+inventory IDs are not overwritten by the seed; adjust the quantities and
+details to match the real lab inventory before using it operationally.
+The starter rows begin with all listed units available and no loan history;
+replace those quantities with an accurate count before real checkouts.
+
+Deploy the updated `student-pin-auth` Edge Function so staff can search
+verified student accounts and verify student PINs at checkout:
+
+```powershell
+npx.cmd supabase functions deploy student-pin-auth --no-verify-jwt
+```
+
+In **Edge Functions → Secrets**, make sure `APP_ORIGINS` includes the exact
+site origin (for local testing, such as `http://localhost:8766`) and
+`PIN_RATE_LIMIT_SECRET` is set. Keep service-role keys, SMTP credentials, and
+other private secrets in Supabase—not in frontend code or GitHub.
 
 Students register with a confirmed KLD email, name, Student ID, and account
 password, then create a PIN. Admin emails must be added to the private
