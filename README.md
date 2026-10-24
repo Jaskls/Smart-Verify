@@ -80,6 +80,17 @@ python -m http.server 8000
 ```
 
 Then open [http://localhost:8000](http://localhost:8000).
+## Photos, scanning and offline
+- **Equipment photos:** each sample item has a picture in `images/equipment/`. Admins can upload their own
+  photo when adding or editing equipment (it is shrunk and saved in the browser). Staff see a large
+  photo pop-up and must tap Confirm after scanning a tool, on both borrow and return.
+- **Scanner:** `js/scan.js` reads QR codes and common barcodes (Code 128/39, EAN, UPC) with the camera.
+- **Borrow timer:** open loans show a live count of how long the tool has been out.
+- **Offline:** `sw.js` saves the app on the device so it opens without internet. Borrows and returns are
+  saved on the device and listed as waiting to sync, then sync when the connection returns.
+
+## Run it locally
+ES modules don't load from `file://`, so serve the folder with any static server:
 
 Camera scanning requires HTTPS or localhost and permission to use the camera.
 You can also host the static site with Netlify.

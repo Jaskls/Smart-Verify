@@ -1,0 +1,4 @@
+/js/pages/*  /:splat  200!
+/js/*  /:splat  200!
+/css/*  /:splat  200!
+/images/equipment/*  /:splat  200!

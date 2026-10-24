@@ -693,6 +693,7 @@ dialog.modal::backdrop { background: rgba(32, 40, 36, 0.4); }
 
 /* Borrow / return */
 .workflow { display: grid; grid-template-columns: 1fr 360px; gap: 20px; align-items: start; }
+.workflow[hidden] { display: none; }
 .steps { display: grid; gap: 20px; }
 .step-num {
   width: 26px; height: 26px; border-radius: 50%;
