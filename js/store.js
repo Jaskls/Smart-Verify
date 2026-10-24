@@ -6,6 +6,11 @@ const { data: sessionData, error: sessionError } = await supabase.auth.getSessio
 if (sessionError) throw sessionError;
 
 export async function reloadData() {
+  categories.splice(0);
+  equipment.splice(0);
+  students.splice(0);
+  transactions.splice(0);
+
   if (!sessionData.session) return;
   const userId = sessionData.session.user.id;
   const { data: profile, error: profileError } = await supabase
