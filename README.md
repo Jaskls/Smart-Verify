@@ -25,10 +25,11 @@ in with an approved email and password.
 
 ## Current project status
 
-Supabase stores accounts, student PIN credentials, equipment inventory, and
-borrow/return transactions. Inventory changes and loan records are shared
-between signed-in staff and students. Equipment photo selection is currently a
-local preview only; the QR print queue is saved in this browser.
+Supabase stores accounts, student PIN credentials, equipment inventory and
+photos, borrow/return transactions, and each administrator's QR print queue.
+Inventory changes, photos, and loan records are shared between signed-in staff
+and students. QR queues are private to the administrator account that created
+them and follow that account across browsers.
 Overdue-loan checks are enforced by the database. Administrators can generate
 one-use supervisor codes for an approved exception; those codes are stored and
 consumed in Supabase.
@@ -44,7 +45,8 @@ the counter before issuing equipment.
 - **Supabase** for authentication, profiles, shared inventory and loans, and
   the student PIN function.
 - **Netlify** for static hosting and deployment from GitHub.
-- **Browser localStorage** for theme preference and QR print queue.
+- **Browser localStorage** for theme preference; equipment photos and QR queues
+  are stored in Supabase.
 
 ## Project structure
 
@@ -64,7 +66,7 @@ js/supabase.js                     Supabase client configuration
 js/sample-data.js                  Initial UI data shapes and demo fixtures
 js/store.js                        Supabase data loading and equipment writes
 js/scan.js                         Camera QR scanning
-js/qr-queue.js                     Browser-local sticker queue
+js/qr-queue.js                     Supabase-backed sticker queue
 js/pages/*.js                      Page-specific behavior
 supabase-setup.sql                 Supabase account, inventory, and loan schema
 supabase/functions/student-pin-auth/index.ts
@@ -90,10 +92,12 @@ Then open [http://localhost:8000](http://localhost:8000).
 
 Configure the project URL and publishable key in `js/supabase.js`, then run
 the latest `supabase-setup.sql` in the Supabase SQL Editor. This creates and
-seeds the example equipment inventory, creates shared loan tables and secure
-checkout/return database functions, and updates account policies. Existing
-inventory IDs are not overwritten by the seed; adjust the quantities and
-details to match the real lab inventory before using it operationally.
+seeds the example equipment inventory, creates shared loan and per-admin QR
+queue tables, creates the public equipment-photo storage bucket with
+administrator-only upload policies, installs secure checkout/return database
+functions, and updates account policies. Existing inventory IDs are not
+overwritten by the seed; adjust the quantities and details to match the real
+lab inventory before using it operationally.
 The starter rows begin with all listed units available and no loan history;
 replace those quantities with an accurate count before real checkouts.
 

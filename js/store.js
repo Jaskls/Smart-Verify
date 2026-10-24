@@ -48,7 +48,7 @@ export async function reloadData() {
     available: item.available,
     condition: item.condition,
     components: item.components,
-    photo: null,
+    photo: item.photo_url,
   })));
   categories.splice(0, categories.length, ...new Set(equipment.map((item) => item.category)));
   students.splice(0, students.length, ...(studentResult.data ?? []).map((student) => ({
@@ -87,7 +87,21 @@ try {
   throw error;
 }
 
-export async function saveEquipment(item) {
+export async function saveEquipment(item, photoFile = null) {
+  let photoUrl = item.photo ?? null;
+  if (photoFile) {
+    if (!["image/jpeg", "image/png", "image/webp"].includes(photoFile.type)) {
+      throw new Error("Choose a JPG, PNG or WebP photo.");
+    }
+    const path = `${item.id}/photo`;
+    const { error: uploadError } = await supabase.storage
+      .from("equipment-photos")
+      .upload(path, photoFile, { upsert: true, contentType: photoFile.type });
+    if (uploadError) throw uploadError;
+    const { data } = supabase.storage.from("equipment-photos").getPublicUrl(path);
+    photoUrl = data.publicUrl;
+  }
+
   const { error } = await supabase.from("equipment").upsert({
     id: item.id,
     tag: item.tag,
@@ -98,8 +112,10 @@ export async function saveEquipment(item) {
     available: item.available,
     condition: item.condition,
     components: item.components,
+    photo_url: photoUrl,
   });
   if (error) throw error;
+  return { ...item, photo: photoUrl };
 }
 
 export async function deleteEquipment(id) {

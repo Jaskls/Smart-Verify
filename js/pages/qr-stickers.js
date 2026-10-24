@@ -1,7 +1,7 @@
 import { equipment } from "../sample-data.js";
 import { renderShell, escapeHtml, toast } from "../app.js";
 import { requireProfile } from "../auth.js";
-import { clearStickerQueue, readStickerQueue, removeStickerFromQueue } from "../qr-queue.js";
+import { addStickerToQueue, addStickersToQueue, clearStickerQueue, readStickerQueue, removeStickerFromQueue } from "../qr-queue.js";
 
 const profile = await requireProfile("admin");
 renderShell({ profile, active: "qr-stickers.html" });
@@ -19,16 +19,23 @@ if (singleId) {
   clearButton.hidden = true;
 }
 
-function getStickers() {
+async function getStickers() {
   if (singleId) {
     const item = equipment.find((equipmentItem) => equipmentItem.id === singleId);
     return item ? [{ id: item.id, tag: item.tag, name: item.name }] : [];
   }
-  return readStickerQueue();
+  return await readStickerQueue();
 }
 
-function render() {
-  const stickers = getStickers();
+async function render() {
+  let stickers;
+  try {
+    stickers = await getStickers();
+  } catch (error) {
+    pageContainer.innerHTML = `<section class="card empty sticker-empty">Could not load the saved QR queue: ${escapeHtml(error.message)}</section>`;
+    count.textContent = "Queue unavailable";
+    return;
+  }
   count.textContent = singleId
     ? stickers.length ? "1 sticker" : "Equipment item not found."
     : `${stickers.length} sticker${stickers.length === 1 ? "" : "s"} in the queue`;
@@ -70,25 +77,52 @@ function render() {
 
 printButton.addEventListener("click", () => window.print());
 
-clearButton.addEventListener("click", () => {
+clearButton.addEventListener("click", async () => {
   if (!confirm("Clear all stickers from the print queue?")) return;
   try {
-    clearStickerQueue();
-    render();
-  } catch {
-    toast("Could not clear the QR sticker queue.", "error");
+    await clearStickerQueue();
+    await render();
+  } catch (error) {
+    toast(`Could not clear the QR sticker queue: ${error.message}`, "error");
   }
 });
 
-pageContainer.addEventListener("click", (event) => {
+pageContainer.addEventListener("click", async (event) => {
   const removeButton = event.target.closest("[data-remove-tag]");
   if (!removeButton) return;
   try {
-    removeStickerFromQueue(removeButton.dataset.removeTag);
-    render();
-  } catch {
-    toast("Could not remove the sticker from the queue.", "error");
+    await removeStickerFromQueue(removeButton.dataset.removeTag);
+    await render();
+  } catch (error) {
+    toast(`Could not remove the sticker from the queue: ${error.message}`, "error");
   }
 });
 
-render();
+document.getElementById("queue-all").addEventListener("click", async () => {
+  try {
+    await addStickersToQueue(equipment);
+    await render();
+    toast(`${equipment.length} stickers are ready to print.`);
+  } catch (error) {
+    toast(`Could not fill the sticker queue: ${error.message}`, "error");
+  }
+});
+
+document.getElementById("qr-make").addEventListener("click", async () => {
+  const codeInput = document.getElementById("qr-code-text");
+  const labelInput = document.getElementById("qr-label-text");
+  const code = codeInput.value.trim();
+  const label = labelInput.value.trim();
+  if (!code) { toast("Type the code first.", "error"); return; }
+  try {
+    await addStickerToQueue({ id: `custom-${crypto.randomUUID()}`, tag: code, name: label || code });
+    await render();
+    codeInput.value = "";
+    labelInput.value = "";
+    toast(`QR for ${code} is in the queue. Scroll down to print.`);
+  } catch (error) {
+    toast(`Could not save that QR: ${error.message}`, "error");
+  }
+});
+
+await render();

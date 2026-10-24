@@ -147,7 +147,7 @@ export function renderShell({ profile, active }) {
   if (main && !main.querySelector(".sample-data-notice")) {
     const notice = document.createElement("div");
     notice.className = "preview-banner sample-data-notice";
-    notice.innerHTML = "<strong>Shared data:</strong> Equipment and borrowing records are saved in Supabase. Equipment photo previews and the QR print queue are local to this browser.";
+    notice.innerHTML = "<strong>Shared data:</strong> Equipment, photos, borrowing records, and your QR print queue are saved in Supabase.";
     main.prepend(notice);
   }
 
@@ -266,7 +266,7 @@ export function conditionTag(condition) {
 // Equipment thumbnail: photo if present, otherwise initials.
 export function equipmentThumb(item) {
   return item.photo
-    ? `<img src="${item.photo}" alt="">`
+    ? `<img src="${escapeHtml(item.photo)}" alt="">`
     : escapeHtml(initials(item.name));
 }
 

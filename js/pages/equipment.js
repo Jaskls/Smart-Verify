@@ -72,6 +72,8 @@ let selectedId = null; // item open in the detail modal
 let editingId = null; // item being edited (null = adding new)
 let draftComponents = [];
 let draftPhoto = null;
+let draftPhotoFile = null;
+let draftPhotoPreviewUrl = null;
 
 // Listing ------------------------------------------------------------------------
 function stockLevel(item) {
@@ -100,7 +102,7 @@ function render() {
         <article class="card equip-card">
           <button class="equip-card-open" type="button" data-id="${escapeHtml(item.id)}">
             <div class="equip-photo">
-              ${item.photo ? `<img src="${item.photo}" alt="">` : escapeHtml(initials(item.name))}
+              ${item.photo ? `<img src="${escapeHtml(item.photo)}" alt="">` : escapeHtml(initials(item.name))}
               ${stockTag(item)}
             </div>
             <div class="equip-info">
@@ -147,7 +149,7 @@ function showDetail(id) {
   if (printButton) printButton.dataset.printId = item.id;
   detailBody.innerHTML = `
     <div class="detail-hero">
-      <div class="equip-photo">${item.photo ? `<img src="${item.photo}" alt="${escapeHtml(item.name)}">` : escapeHtml(initials(item.name))}</div>
+      <div class="equip-photo">${item.photo ? `<img src="${escapeHtml(item.photo)}" alt="${escapeHtml(item.name)}">` : escapeHtml(initials(item.name))}</div>
       <dl class="kv">
         <dt>Asset tag</dt><dd><span class="code-tag">${escapeHtml(item.tag)}</span></dd>
         <dt>Category</dt><dd>${escapeHtml(item.category)}</dd>
@@ -231,20 +233,29 @@ chips.addEventListener("click", (e) => {
   renderChips();
 });
 
-// Photos are previewed locally and are not uploaded to Supabase yet.
 photoInput.addEventListener("change", () => {
   const file = photoInput.files[0];
   if (!file) return;
+  if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+    toast("Choose a JPG, PNG or WebP photo.", "error");
+    photoInput.value = "";
+    return;
+  }
   if (file.size > 5 * 1024 * 1024) {
     toast("Please choose a photo under 5 MB.", "error");
     photoInput.value = "";
     return;
   }
-  draftPhoto = URL.createObjectURL(file);
-  photoPreview.innerHTML = `<img src="${draftPhoto}" alt="">`;
+  if (draftPhotoPreviewUrl) URL.revokeObjectURL(draftPhotoPreviewUrl);
+  draftPhotoFile = file;
+  draftPhotoPreviewUrl = URL.createObjectURL(file);
+  photoPreview.innerHTML = `<img src="${draftPhotoPreviewUrl}" alt="">`;
 });
 
 function openForm(item = null) {
+  if (draftPhotoPreviewUrl) URL.revokeObjectURL(draftPhotoPreviewUrl);
+  draftPhotoPreviewUrl = null;
+  draftPhotoFile = null;
   editingId = item?.id ?? null;
   form.reset();
   formError.textContent = "";
@@ -312,19 +323,19 @@ form.addEventListener("submit", async (e) => {
   saveButton.disabled = true;
   try {
     if (editingId) {
-      await saveEquipment({ ...data, id: editingId });
-      Object.assign(equipment.find((x) => x.id === editingId), data);
+      const saved = await saveEquipment({ ...data, id: editingId }, draftPhotoFile);
+      Object.assign(equipment.find((x) => x.id === editingId), saved);
       toast(`Updated ${data.name} in the shared inventory.`);
     } else {
       const newItem = { id: `eq-${crypto.randomUUID()}`, ...data };
-      await saveEquipment(newItem);
-      equipment.unshift(newItem);
+      const saved = await saveEquipment(newItem, draftPhotoFile);
+      equipment.unshift(saved);
       if (addToQrQueueInput.checked) {
         try {
-          addStickerToQueue(newItem);
+          await addStickerToQueue(saved);
           toast(`${data.name} added to the QR print queue.`);
-        } catch {
-          toast("Equipment was added, but the QR print queue could not be saved.", "error");
+        } catch (error) {
+          toast(`Equipment was saved, but its QR queue entry failed: ${error.message}`, "error");
         }
       } else {
         toast(`Added ${data.name} to the shared inventory.`);
@@ -337,6 +348,9 @@ form.addEventListener("submit", async (e) => {
     saveButton.disabled = false;
   }
   closeModal(formModal);
+  if (draftPhotoPreviewUrl) URL.revokeObjectURL(draftPhotoPreviewUrl);
+  draftPhotoPreviewUrl = null;
+  draftPhotoFile = null;
   render();
 });
 
