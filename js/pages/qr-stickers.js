@@ -1,10 +1,10 @@
 import { equipment } from "../sample-data.js";
-import { getPreviewRole, renderShell, escapeHtml, toast } from "../app.js";
+import { renderShell, escapeHtml, toast } from "../app.js";
+import { requireProfile } from "../auth.js";
 import { clearStickerQueue, readStickerQueue, removeStickerFromQueue } from "../qr-queue.js";
 
-const role = getPreviewRole();
-if (role !== "admin") location.replace("equipment.html?view=student");
-renderShell({ role: "admin", active: "qr-stickers.html" });
+const profile = await requireProfile("admin");
+renderShell({ profile, active: "qr-stickers.html" });
 
 const pageContainer = document.getElementById("sticker-pages");
 const count = document.getElementById("queue-count");

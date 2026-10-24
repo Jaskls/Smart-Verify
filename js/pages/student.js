@@ -1,15 +1,20 @@
 // Student portal — the signed-in student's own loans.
-// Stage 1 shows a fixed sample student. Stage 3 uses the real signed-in account.
-import { transactions, findEquipment, findStudent, previewStudentId } from "../sample-data.js";
+// The profile is real; the borrowing records are not yet connected to Supabase.
+import { transactions, findEquipment } from "../sample-data.js";
 import {
-  renderShell, setPreviewRole, escapeHtml, formatDate, daysUntil,
+  renderShell, escapeHtml, formatDate, daysUntil,
   loanStatus, statusTag, equipmentThumb,
 } from "../app.js";
+import { requireProfile } from "../auth.js";
 
-setPreviewRole("student");
-renderShell({ role: "student", active: "student.html" });
+const profile = await requireProfile("student");
+renderShell({ profile, active: "student.html" });
 
-const me = findStudent(previewStudentId);
+const me = {
+  id: profile.id,
+  name: profile.full_name,
+  studentNo: profile.student_no,
+};
 const mine = transactions.filter((t) => t.studentId === me.id);
 const open = mine.filter((t) => !t.returnedAt).sort((a, b) => new Date(a.dueAt) - new Date(b.dueAt));
 const past = mine.filter((t) => t.returnedAt).sort((a, b) => new Date(b.returnedAt) - new Date(a.returnedAt));
@@ -18,10 +23,9 @@ document.getElementById("greeting").textContent = `Hi, ${me.name.split(" ")[0]}`
 
 document.getElementById("id-card").innerHTML = `
   <div>
-    <p class="eyebrow">Student ID</p>
+    <p class="eyebrow">Student account</p>
     <h2>${escapeHtml(me.name)}</h2>
-    <p class="mono" style="margin-top:4px">${me.studentNo}</p>
-    <p style="margin-top:8px;color:#aeb9ca;font-size:14px">${escapeHtml(me.course)} · Year ${me.year}</p>
+    <p class="mono" style="margin-top:4px">${escapeHtml(me.studentNo)}</p>
   </div>
   <div style="text-align:center">
     <div class="student-qr" id="student-qr" role="img" aria-label="Student ID QR code"></div>

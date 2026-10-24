@@ -1,9 +1,10 @@
 // Transaction history — searchable, filterable list of every borrow and return.
 import { transactions, findEquipment, getTransactionStudent } from "../sample-data.js";
-import { renderShell, setPreviewRole, escapeHtml, formatDate, loanStatus, statusTag } from "../app.js";
+import { renderShell, escapeHtml, formatDate, loanStatus, statusTag } from "../app.js";
+import { requireProfile } from "../auth.js";
 
-setPreviewRole("admin");
-renderShell({ role: "admin", active: "history.html" });
+const profile = await requireProfile("admin");
+renderShell({ profile, active: "history.html" });
 
 const search = document.getElementById("search");
 const filterButtons = document.querySelectorAll("[data-status]");

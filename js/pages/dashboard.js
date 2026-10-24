@@ -1,12 +1,13 @@
 // Admin dashboard — summary of stock and loans.
 import { equipment, transactions, findEquipment, getTransactionStudent } from "../sample-data.js";
 import {
-  renderShell, setPreviewRole, escapeHtml, formatDate, daysUntil,
+  renderShell, escapeHtml, formatDate, daysUntil,
   loanStatus, statusTag, equipmentThumb,
 } from "../app.js";
+import { requireProfile } from "../auth.js";
 
-setPreviewRole("admin");
-renderShell({ role: "admin", active: "dashboard.html" });
+const profile = await requireProfile("admin");
+renderShell({ profile, active: "dashboard.html" });
 
 document.getElementById("today-label").textContent = new Date().toLocaleDateString(undefined, {
   weekday: "long", month: "long", day: "numeric",
