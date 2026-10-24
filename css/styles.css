@@ -121,7 +121,11 @@ button, input, select, textarea { font: inherit; color: inherit; }
   position: sticky;
   top: 0;
   height: 100vh;
+  view-transition-name: app-sidebar;
 }
+
+::view-transition-old(app-sidebar),
+::view-transition-new(app-sidebar) { animation: none; }
 
 .brand {
   display: flex;

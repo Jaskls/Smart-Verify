@@ -107,6 +107,7 @@ export function initials(name) {
 
 export function renderShell({ profile, active }) {
   const role = profile.role;
+  sessionStorage.setItem("smartVerify.navRole", role);
   const sidebar = document.getElementById("sidebar");
   if (!sidebar) return;
 
