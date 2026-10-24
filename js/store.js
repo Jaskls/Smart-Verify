@@ -1,14 +1,13 @@
-/* [for saving the demo data in the browser to survive page reload]
+/* [for saving the sample inventory and loans in this browser]
 Process:
-  • sample-data.js still holds the starting ("seed") data.
+  • sample-data.js holds the starting data.
   • When any page loads, this file copies the saved data from localStorage
     INTO those same arrays, before the page code runs.
   • It saves again after changes (and every 2 seconds, and when you leave
     the page), so the other pages never need to know about saving.
-  • "Reset demo" (small button, bottom-left) wipes saved data and reloads.
 
-Only equipment and transactions r saved. Students come from the seed.
-If the team changes sample-data.js, bump SEED_VERSION so old saves are ignored. */
+Only equipment and transactions are saved. Student examples come from the seed.
+Account authentication is separate and handled by Supabase. */
 import { equipment, students, transactions } from "./sample-data.js";
 
 const SEED_VERSION = 1;
@@ -44,13 +43,6 @@ export function save() {
   }
 }
 
-export function resetDemo() {
-  try {
-    Object.keys(localStorage).filter((k) => k.startsWith("sv.")).forEach((k) => localStorage.removeItem(k));
-  } catch (err) { /* ignore */ }
-  location.reload();
-}
-
 hydrate();
 preserveBorrowerSnapshots();
 
@@ -58,16 +50,3 @@ preserveBorrowerSnapshots();
 window.addEventListener("pagehide", save);
 document.addEventListener("visibilitychange", () => { if (document.hidden) save(); });
 setInterval(save, 2000);
-
-// Small "Reset demo" button on every page.
-window.addEventListener("DOMContentLoaded", () => {
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.textContent = "Reset demo";
-  btn.title = "Erase saved changes and restore the starting data";
-  btn.style.cssText = "position:fixed;left:12px;bottom:12px;z-index:50;font:12px system-ui;padding:6px 10px;border:1px solid #c5ccd8;border-radius:8px;background:#fff;color:#555;cursor:pointer;opacity:.8";
-  btn.addEventListener("click", () => {
-    if (confirm("Reset the demo? All saved borrows and returns will be erased.")) resetDemo();
-  });
-  document.body.appendChild(btn);
-});

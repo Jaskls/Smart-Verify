@@ -3,9 +3,10 @@ Now with: saved data, PIN check, overdue lockout + override code, Incomplete
 returns, Undo (30 s), QR scanning (with typing as backup), offline simulation. */
 import { students, equipment, transactions, findEquipment, findStudent, findStudentByNumber, getTransactionStudent } from "../sample-data.js";
 import {
-  renderShell, setPreviewRole, escapeHtml, formatDate, toDateInputValue, daysUntil,
+  renderShell, escapeHtml, formatDate, toDateInputValue, daysUntil,
   statusTag, stockTag, equipmentThumb, initials, toast,
 } from "../app.js";
+import { requireProfile } from "../auth.js";
 import { save } from "../store.js";
 import {
   checkPin, isLockedOut, overdueLoans, createOverrideCode, useOverrideCode,
@@ -13,8 +14,8 @@ import {
 } from "../rules.js";
 import { scanCode } from "../scan.js";
 
-setPreviewRole("admin");
-renderShell({ role: "admin", active: "borrow.html" });
+const profile = await requireProfile("admin");
+renderShell({ profile, active: "borrow.html" });
 
 const $ = (id) => document.getElementById(id);
 const byDue = (a, b) => new Date(a.dueAt) - new Date(b.dueAt);

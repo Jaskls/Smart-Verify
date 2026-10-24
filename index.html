@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Sign in · Smart-Verify</title>
+  <script src="js/theme-init.js"></script>
   <meta name="description" content="Smart-Verify — laboratory equipment borrowing with verified check-out and return.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -47,32 +48,116 @@
     <main class="auth-panel">
       <div class="auth-card">
         <div>
-          <p class="eyebrow">Welcome back</p>
-          <h2>Sign in to Smart-Verify</h2>
+          <p class="eyebrow" id="auth-eyebrow">Student access</p>
+          <h2 id="auth-title">Sign in with your Student ID</h2>
+          <p class="auth-flow-copy" id="auth-flow-copy" hidden></p>
         </div>
 
-        <div class="segmented" role="tablist" aria-label="Account type">
-          <button type="button" role="tab" aria-selected="true" data-role="student">Student</button>
-          <button type="button" role="tab" aria-selected="false" data-role="admin">Administrator</button>
+        <div class="segmented auth-modes" role="tablist" aria-label="Sign in as">
+          <button type="button" role="tab" aria-selected="true" aria-controls="signin-form" data-role-tab="student">Student</button>
+          <button type="button" role="tab" aria-selected="false" aria-controls="signin-form" data-role-tab="staff">Staff / Admin</button>
         </div>
 
         <form id="signin-form" novalidate>
-          <div class="field">
-            <label for="identifier" id="identifier-label">Student number or school email</label>
-            <input class="input" id="identifier" name="identifier" autocomplete="username" placeholder="2024-00117" required>
+          <div class="field" data-mode-field="student_login">
+            <label for="student-id">Student ID</label>
+            <input class="input" id="student-id" name="student_id" autocomplete="username" placeholder="Enter your Student ID" required>
           </div>
-          <div class="field">
-            <label for="password">Password</label>
-            <input class="input" id="password" name="password" type="password" autocomplete="current-password" placeholder="••••••••" required>
+          <div class="field" data-mode-field="student_login">
+            <label for="student-pin">4-digit PIN</label>
+            <input class="input" id="student-pin" name="student_pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off" placeholder="Enter your 4-digit PIN" data-pin-input required>
           </div>
-          <button class="btn btn-primary btn-block" type="submit">Sign in</button>
+          <div class="field" data-mode-field="signup" hidden>
+            <label for="signup-full-name">Full name</label>
+            <input class="input" id="signup-full-name" name="signup_full_name" autocomplete="name" maxlength="120" placeholder="Enter your full name" required>
+          </div>
+          <div class="field" data-mode-field="signup" hidden>
+            <label for="signup-student-id">Student ID</label>
+            <input class="input" id="signup-student-id" name="signup_student_id" autocomplete="off" maxlength="80" placeholder="Enter your Student ID" required>
+            <small class="field-hint">Choose your Student ID. Each ID can be linked to only one account.</small>
+          </div>
+          <div class="field" data-mode-field="signup" hidden>
+            <label for="signup-email">School email</label>
+            <input class="input" id="signup-email" name="signup_email" type="email" autocomplete="email" placeholder="you@kld.edu.ph" required>
+            <small class="field-hint">Use an email address ending in @kld.edu.ph. You must verify it.</small>
+          </div>
+          <div class="field" data-mode-field="signup" hidden>
+            <label for="signup-password">Password</label>
+            <input class="input" id="signup-password" name="signup_password" type="password" autocomplete="new-password" minlength="8" placeholder="Create a password (at least 8 characters)" required>
+            <small class="field-hint">This creates your account. After email verification, you can set your PIN without entering this password again.</small>
+          </div>
+          <div class="field" data-mode-field="email_verification" hidden>
+            <label for="verification-email">School email</label>
+            <input class="input" id="verification-email" name="verification_email" type="email" autocomplete="email" readonly required>
+          </div>
+          <div class="field" data-mode-field="email_verification" hidden>
+            <label for="verification-code">Email verification code</label>
+            <input class="input" id="verification-code" name="verification_code" inputmode="numeric" autocomplete="one-time-code" pattern="([0-9]{6}|[0-9]{8})" maxlength="8" placeholder="Enter the email code" required>
+            <small class="field-hint">Enter the code sent to your KLD email.</small>
+          </div>
+          <div class="field" data-mode-field="recovery_email" hidden>
+            <label for="recovery-email">School email</label>
+            <input class="input" id="recovery-email" name="recovery_email" type="email" autocomplete="email" placeholder="you@kld.edu.ph" required>
+          </div>
+          <div class="field" data-mode-field="pin_setup" hidden>
+            <p class="field-hint">Your email has been verified. Create the PIN you’ll use to sign in.</p>
+          </div>
+          <div class="field" data-mode-field="pin_setup" hidden>
+            <label for="new-pin">Choose a 4-digit PIN</label>
+            <input class="input" id="new-pin" name="new_pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off" placeholder="Create a 4-digit PIN" data-pin-input required>
+          </div>
+          <div class="field" data-mode-field="pin_setup" hidden>
+            <label for="confirm-pin">Confirm 4-digit PIN</label>
+            <input class="input" id="confirm-pin" name="confirm_pin" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off" placeholder="Re-enter your PIN" data-pin-input required>
+          </div>
+          <div class="field" data-mode-field="staff_login" hidden>
+            <label for="staff-email">School email</label>
+            <input class="input" id="staff-email" name="staff_email" type="email" autocomplete="username" placeholder="name@school.edu" required>
+          </div>
+          <div class="field" data-mode-field="staff_login" hidden>
+            <label for="staff-password">Password</label>
+            <input class="input" id="staff-password" name="staff_password" type="password" autocomplete="current-password" placeholder="Enter your password" required>
+          </div>
+          <div class="field" data-mode-field="staff_signup" hidden>
+            <label for="staff-signup-name">Full name</label>
+            <input class="input" id="staff-signup-name" name="staff_signup_name" autocomplete="name" placeholder="Enter your name" required>
+          </div>
+          <div class="field" data-mode-field="staff_signup" hidden>
+            <label for="staff-signup-email">Approved school email</label>
+            <input class="input" id="staff-signup-email" name="staff_signup_email" type="email" autocomplete="email" placeholder="name@school.edu" required>
+          </div>
+          <div class="field" data-mode-field="staff_signup" hidden>
+            <label for="staff-signup-password">Create a password</label>
+            <input class="input" id="staff-signup-password" name="staff_signup_password" type="password" autocomplete="new-password" minlength="8" placeholder="At least 8 characters" required>
+          </div>
+          <button class="btn btn-primary btn-block" type="submit" id="submit-button">Sign in</button>
+          <div class="auth-links auth-link-bar" data-mode-field="student_login">
+            <button class="auth-link" type="button" data-mode="signup">Create an account</button>
+            <button class="auth-link" type="button" data-mode="recovery_email" data-pin-intent="reset">Forgot PIN</button>
+            <button class="auth-link" type="button" id="continue-pin-setup" data-mode="pin_setup" hidden>Continue account setup</button>
+          </div>
+          <div class="auth-links auth-links-single" data-mode-field="signup" hidden>
+            <button class="auth-link" type="button" data-mode="student_login">Already registered? Sign in</button>
+          </div>
+          <div class="auth-links auth-links-single" data-mode-field="email_verification" hidden>
+            <button class="auth-link" type="button" id="resend-verification-code">Resend code</button>
+          </div>
+          <div class="auth-links auth-links-single" data-mode-field="recovery_email" hidden>
+            <button class="auth-link" type="button" data-mode="student_login">Back to Student Sign In</button>
+          </div>
+          <div class="auth-links auth-links-single" data-mode-field="staff_login" hidden>
+            <button class="auth-link" type="button" data-mode="staff_signup">Create approved admin account</button>
+          </div>
+          <div class="auth-links auth-links-single" data-mode-field="staff_signup" hidden>
+            <button class="auth-link" type="button" data-mode="staff_login">Back to Staff / Admin sign in</button>
+          </div>
+          <div class="auth-links auth-links-single" data-mode-field="pin_setup" hidden>
+            <button class="auth-link" type="button" data-mode="student_login">Back to Student Sign In</button>
+          </div>
+          <p class="auth-status" id="auth-status" role="status" aria-live="polite" hidden></p>
         </form>
 
-        <div class="divider">Preview the interface</div>
-        <div class="preview-links">
-          <a class="btn" href="dashboard.html" data-preview="admin">Administrator view</a>
-          <a class="btn" href="student.html" data-preview="student">Student view</a>
-        </div>
+        <p class="auth-note">Students can self-register with any confirmed @kld.edu.ph email, a name, and a unique Student ID. Student IDs and names are not checked against school records. PINs are verified securely and never stored in plain text.</p>
       </div>
     </main>
   </div>

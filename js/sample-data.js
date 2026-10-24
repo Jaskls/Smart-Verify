@@ -161,6 +161,3 @@ export function getTransactionStudent(tx) {
 }
 export const findStudentByNumber = (no) =>
   students.find((s) => s.studentNo === no.trim());
-
-// In Stage 1 the "signed in" student for the student portal is fixed.
-export const previewStudentId = "st-01";

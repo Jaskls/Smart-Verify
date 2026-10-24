@@ -1,11 +1,11 @@
 /* [app.js: shared helpers used by every page]
 
-• renderShell()  draws the sidebar + preview banner so each HTML page stays short
+• renderShell()  draws the sidebar and shared page notice
 • icon()         small inline SVG icon set
 • date + status helpers for loans
 • toast() and modal helpers */
 
-import { admins, students, previewStudentId } from "./sample-data.js";
+import { signOut } from "./auth.js";
 import "./store.js"; // loads saved data into the sample-data arrays (see store.js)
 
 const THEME_KEY = "sv-theme";
@@ -95,18 +95,6 @@ const NAV = {
     { href: "equipment.html?view=student", label: "Browse Equipment", icon: "box" },
   ],
 };
-/* In Stage 1 the role is just remembered in the browser tab so the preview
-can switch between views. Stage 3 replaces this with real Supabase Auth. */
-export function getPreviewRole() {
-  const fromUrl = new URLSearchParams(location.search).get("view");
-  if (fromUrl === "student") return "student";
-  return sessionStorage.getItem("sv-preview-role") || "admin";
-}
-
-export function setPreviewRole(role) {
-  sessionStorage.setItem("sv-preview-role", role);
-}
-
 export function initials(name) {
   return name
     .replace(/^(Prof\.|Dr\.)\s*/i, "")
@@ -117,15 +105,17 @@ export function initials(name) {
     .toUpperCase();
 }
 
-export function renderShell({ role = "admin", active }) {
+export function renderShell({ profile, active }) {
+  const role = profile.role;
   const sidebar = document.getElementById("sidebar");
   if (!sidebar) return;
 
   addThemeToggle(document.querySelector(".page-head"));
 
-  const person = role === "student"
-    ? { name: students.find((s) => s.id === previewStudentId).name, sub: "Student" }
-    : { name: admins[0].name, sub: admins[0].role };
+  const person = {
+    name: profile.full_name || profile.student_no || "Account",
+    sub: role === "student" ? "Student" : "Administrator",
+  };
 
   const links = NAV[role]
     .map((item) => `
@@ -147,14 +137,34 @@ export function renderShell({ role = "admin", active }) {
       ${links}
     </nav>
     <div class="sidebar-foot">
-      <div class="avatar">${initials(person.name)}</div>
+      <div class="avatar">${escapeHtml(initials(person.name))}</div>
       <div class="who"><strong>${escapeHtml(person.name)}</strong><span>${person.sub}</span></div>
-      <a href="index.html">Sign out</a>
+      <button class="sidebar-signout" type="button" data-signout>Sign out</button>
     </div>`;
 
+  const main = document.querySelector(".main");
+  if (main && !main.querySelector(".sample-data-notice")) {
+    const notice = document.createElement("div");
+    notice.className = "preview-banner sample-data-notice";
+    notice.innerHTML = "<strong>Sample data:</strong> Equipment and borrowing records are examples; only accounts use Supabase.";
+    main.prepend(notice);
+  }
+
+  sidebar.querySelector("[data-signout]").addEventListener("click", async () => {
+    try {
+      await signOut();
+    } catch (error) {
+      toast(`Could not sign out: ${error.message}`, "error");
+    }
+  });
+
   const menuButtons = document.querySelectorAll(".menu-toggle");
+  const mobileNavigation = window.matchMedia("(max-width: 860px)");
+  let menuOpen = !mobileNavigation.matches;
   const setMenuOpen = (isOpen) => {
+    menuOpen = isOpen;
     sidebar.classList.toggle("open", isOpen);
+    document.querySelector(".app")?.classList.toggle("nav-collapsed", !isOpen && !mobileNavigation.matches);
     menuButtons.forEach((btn) => {
       btn.setAttribute("aria-controls", sidebar.id);
       btn.setAttribute("aria-expanded", String(isOpen));
@@ -162,24 +172,24 @@ export function renderShell({ role = "admin", active }) {
     });
   };
 
-  // Mobile menu toggle
   menuButtons.forEach((btn) => {
     btn.innerHTML = icon("menu");
     btn.setAttribute("aria-controls", sidebar.id);
-    btn.setAttribute("aria-expanded", "false");
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
-      setMenuOpen(!sidebar.classList.contains("open"));
+      setMenuOpen(!menuOpen);
     });
   });
+  setMenuOpen(menuOpen);
+  mobileNavigation.addEventListener("change", (event) => setMenuOpen(!event.matches));
   sidebar.querySelector(".sidebar-close").addEventListener("click", () => setMenuOpen(false));
   document.addEventListener("click", (e) => {
-    if (sidebar.classList.contains("open") && !sidebar.contains(e.target) && !e.target.closest(".menu-toggle")) {
+    if (mobileNavigation.matches && menuOpen && !sidebar.contains(e.target) && !e.target.closest(".menu-toggle")) {
       setMenuOpen(false);
     }
   });
-  document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && sidebar.classList.contains("open")) setMenuOpen(false);
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && menuOpen) setMenuOpen(false);
   });
 }
 

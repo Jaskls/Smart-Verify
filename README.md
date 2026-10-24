@@ -1,47 +1,85 @@
 # Smart-Verify
 
-Smart-Verify is a laboratory equipment borrowing system. Administrators check
-equipment out to students, record due dates, and verify every component when
-items come back. Students see what they've borrowed and when it's due.
+Smart-Verify is a laboratory equipment borrowing app designed to help staff
+track equipment from checkout to return. It brings student verification,
+equipment checklists, due dates, and transaction history into one interface.
 
-**Current stage: 1 of 7. The interface is built and uses sample data.**
-See [PLAN.md](PLAN.md) for the full roadmap.
+Students sign in with their Student ID and PIN. Staff and administrators sign
+in with an approved email and password.
+
+## Features
+
+- **Student portal:** View borrowed equipment and a QR code for student
+  identification.
+- **Equipment management:** Browse, add, edit, and remove equipment in the
+  inventory interface.
+- **Borrow and return workflow:** Scan student and equipment QR codes, verify
+  items and components, and record due dates and returns.
+- **Equipment checklists:** Track individual components so staff can verify
+  what is returned.
+- **History and dashboard:** Review borrowing activity and see equipment and
+  loan summaries.
+- **QR stickers:** Create and print QR labels for equipment.
+- **Account security:** Student accounts require a verified `@kld.edu.ph`
+  email and use a four-digit PIN. Admin accounts require an approved email.
+
+## Current project status
+
+Supabase is currently used for account authentication and profiles. Equipment,
+student, and borrowing records are still sample data saved in the browser;
+they are not shared between devices or stored in Supabase. Equipment photos
+and the QR print queue are also browser-local.
+
+Student self-registration checks that the student can verify a `@kld.edu.ph`
+email, but it does **not** verify that their entered name or Student ID matches
+official school records. Do not use the current sample inventory and borrowing
+data as a production source of truth.
 
 ## Technologies
-- **HTML, CSS, vanilla JavaScript.** Plain files with no framework and no build step.
-  JavaScript uses native ES modules (`<script type="module">`).
-- **Supabase** for the database, authentication and photo storage (from Stage 2).
-- **Netlify** for hosting, deployed from **GitHub**.
+
+- **HTML, CSS, and vanilla JavaScript** using native ES modules; no build step.
+- **Supabase** for authentication, account profiles, and the student PIN
+  function.
+- **Netlify** for static hosting and deployment from GitHub.
+- **Browser localStorage** for sample inventory changes, transactions, theme
+  preference, and QR print queue.
 
 ## Project structure
+
+```text
+index.html                         Sign-in and account creation
+dashboard.html                     Admin dashboard
+equipment.html                     Equipment inventory
+borrow.html                        Borrow and return workflow
+history.html                       Transaction history
+student.html                       Student portal
+qr-stickers.html                   QR sticker queue and print preview
+qr-sheet.html                      Printable QR sheet
+css/styles.css                     Application styles
+js/app.js                          Shared layout and UI helpers
+js/auth.js                         Profile access and role checks
+js/supabase.js                     Supabase client configuration
+js/sample-data.js                  Example inventory, students, and loans
+js/store.js                        Browser storage for sample records
+js/scan.js                         Camera QR scanning
+js/qr-queue.js                     Browser-local sticker queue
+js/pages/*.js                      Page-specific behavior
+supabase-setup.sql                 Supabase tables, policies, and triggers
+supabase/functions/student-pin-auth/index.ts
+                                   Student PIN setup and sign-in
+netlify.toml                       Static hosting configuration
 ```
-index.html          Sign-in page
-dashboard.html      Admin overview
-equipment.html      Inventory (admin manages, students browse with ?view=student)
-borrow.html         Borrow & Return workflow
-history.html        Transaction history
-student.html        Student portal
-qr-stickers.html    Admin QR sticker queue and print preview
-css/styles.css      All styles
-js/app.js           Shared helpers: sidebar, icons, dates, status tags, toasts
-js/sample-data.js   Sample data (replaced by Supabase in later stages)
-js/qr-queue.js      Browser-local QR sticker queue
-js/pages/*.js       One script per page
-netlify.toml        Netlify settings (static site, no build)
+
+## Run locally
+
+JavaScript modules need to be served over HTTP; opening `index.html` directly
+with `file://` will not work. From the project folder, run:
+
+```powershell
+python -m http.server 8000
 ```
 
-## QR equipment stickers
-Admins can select **Add to QR Print Queue** when creating equipment, print a
-single sticker from the equipment list or detail view, or manage a batch from
-**QR Stickers** in the sidebar. The queue is stored in this browser's
-`localStorage` for the demo; it is not synced to a database. QR codes are
-generated in the browser and contain the equipment asset tag.
-
-Transaction history keeps records when a student is removed. Borrower name and
-student number are stored with new transactions, and existing records are
-backfilled from available student data; when no saved identity is available,
-the record is labelled **Former or removed student**.
-
+Then open [http://localhost:8000](http://localhost:8000).
 ## Photos, scanning and offline
 - **Equipment photos:** each sample item has a picture in `images/equipment/`. Admins can upload their own
   photo when adding or editing equipment (it is shrunk and saved in the browser). Staff see a large
@@ -54,16 +92,17 @@ the record is labelled **Former or removed student**.
 ## Run it locally
 ES modules don't load from `file://`, so serve the folder with any static server:
 
-```bash
-# Option A: Netlify CLI
-netlify dev
+Camera scanning requires HTTPS or localhost and permission to use the camera.
+You can also host the static site with Netlify.
 
-# Option B: Python
-python3 -m http.server 8000
-```
-Then open the printed address, for example http://localhost:8000.
+## Supabase setup
 
-## What's left
-Stages 2 to 7: the Supabase database and security, real sign-in, saved
-equipment, saved loans, QR and PIN verification, then final testing and
-deploy. Details are in [PLAN.md](PLAN.md).
+To run the app with Supabase authentication, configure the project URL and
+publishable key in `js/supabase.js`, run `supabase-setup.sql` in the Supabase
+SQL Editor, and deploy the `student-pin-auth` Edge Function. Keep service-role
+keys, SMTP credentials, and other private secrets in Supabase—not in frontend
+code or GitHub.
+
+Students register with a confirmed KLD email, name, Student ID, and account
+password, then create a PIN. Admin emails must be added to the private
+`staff_admin_allowlist` before they can create an administrator account.

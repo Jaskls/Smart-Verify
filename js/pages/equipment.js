@@ -1,15 +1,17 @@
 // Equipment inventory — search, filter, view, add, edit, delete.
-// Stage 1: changes are kept in memory only. Stage 4 saves them to Supabase.
+// Inventory and edits are still browser-local sample data.
 import { equipment, categories, transactions } from "../sample-data.js";
 import { addStickerToQueue } from "../qr-queue.js";
 import {
-  renderShell, getPreviewRole, escapeHtml, stockTag, conditionTag,
+  renderShell, escapeHtml, stockTag, conditionTag,
   initials, toast, openModal, closeModal,
 } from "../app.js";
+import { requireProfile } from "../auth.js";
 
-const role = getPreviewRole();
+const profile = await requireProfile();
+const role = profile.role;
 const isAdmin = role === "admin";
-renderShell({ role, active: "equipment.html" });
+renderShell({ profile, active: "equipment.html" });
 
 if (!isAdmin) {
   document.querySelectorAll("[data-admin-only]").forEach((el) => el.remove());
@@ -221,7 +223,7 @@ chips.addEventListener("click", (e) => {
   renderChips();
 });
 
-// Photo preview (local only — the file isn't uploaded until Stage 4).
+// Photos are previewed locally and are not uploaded to Supabase yet.
 photoInput.addEventListener("change", () => {
   const file = photoInput.files[0];
   if (!file) return;
@@ -300,7 +302,7 @@ form.addEventListener("submit", (e) => {
 
   if (editingId) {
     Object.assign(equipment.find((x) => x.id === editingId), data);
-    toast(`Updated ${data.name} (preview only, not saved).`);
+    toast(`Updated ${data.name} in this browser's sample inventory.`);
   } else {
     const newItem = { id: `eq-${Date.now()}`, ...data };
     equipment.unshift(newItem);
@@ -312,7 +314,7 @@ form.addEventListener("submit", (e) => {
         toast("Equipment was added, but the QR print queue could not be saved.", "error");
       }
     }
-    else toast(`Added ${data.name} (preview only, not saved).`);
+    else toast(`Added ${data.name} to this browser's sample inventory.`);
   }
   closeModal(formModal);
   render();
@@ -329,7 +331,7 @@ document.getElementById("delete-btn")?.addEventListener("click", () => {
   if (!confirm(`Delete "${item.name}"? This can't be undone.`)) return;
   equipment.splice(equipment.indexOf(item), 1);
   closeModal(detailModal);
-  toast(`Deleted ${item.name} (preview only).`);
+  toast(`Deleted ${item.name} from this browser's sample inventory.`);
   render();
 });
 
