@@ -1,6 +1,6 @@
 // Equipment inventory — search, filter, view, add, edit, delete.
-// Inventory and edits are still browser-local sample data.
 import { equipment, categories, transactions } from "../sample-data.js";
+import { deleteEquipment, saveEquipment } from "../store.js";
 import { addStickerToQueue } from "../qr-queue.js";
 import {
   renderShell, escapeHtml, stockTag, conditionTag,
@@ -179,7 +179,7 @@ function showDetail(id) {
   openModal(detailModal);
 }
 
-detailBody.addEventListener("click", (e) => {
+detailBody.addEventListener("click", async (e) => {
   const step = e.target.closest("[data-step]");
   if (!step) return;
   const item = equipment.find((x) => x.id === selectedId);
@@ -188,9 +188,17 @@ detailBody.addEventListener("click", (e) => {
     toast(next < 0 ? "Available can't go below zero." : "Available can't exceed total quantity.", "error");
     return;
   }
-  item.available = next;
-  document.getElementById("qty-out").textContent = next;
-  render();
+  step.disabled = true;
+  try {
+    await saveEquipment({ ...item, available: next });
+    item.available = next;
+    document.getElementById("qty-out").textContent = next;
+    render();
+  } catch (error) {
+    toast(error.message || "Could not update available quantity.", "error");
+  } finally {
+    step.disabled = false;
+  }
 });
 
 document.getElementById("print-detail-qr")?.addEventListener("click", (e) => {
@@ -274,7 +282,7 @@ document.getElementById("edit-btn")?.addEventListener("click", () => {
   openForm(equipment.find((x) => x.id === selectedId));
 });
 
-form.addEventListener("submit", (e) => {
+form.addEventListener("submit", async (e) => {
   e.preventDefault();
   const data = {
     name: form.elements.name.value.trim(),
@@ -300,38 +308,56 @@ form.addEventListener("submit", (e) => {
     error = "Available must be between 0 and the total quantity.";
   if (error) { formError.textContent = error; return; }
 
-  if (editingId) {
-    Object.assign(equipment.find((x) => x.id === editingId), data);
-    toast(`Updated ${data.name} in this browser's sample inventory.`);
-  } else {
-    const newItem = { id: `eq-${Date.now()}`, ...data };
-    equipment.unshift(newItem);
-    if (addToQrQueueInput.checked) {
-      try {
-        addStickerToQueue(newItem);
-        toast(`${data.name} added to the QR print queue.`);
-      } catch {
-        toast("Equipment was added, but the QR print queue could not be saved.", "error");
+  const saveButton = form.querySelector('[type="submit"]');
+  saveButton.disabled = true;
+  try {
+    if (editingId) {
+      await saveEquipment({ ...data, id: editingId });
+      Object.assign(equipment.find((x) => x.id === editingId), data);
+      toast(`Updated ${data.name} in the shared inventory.`);
+    } else {
+      const newItem = { id: `eq-${crypto.randomUUID()}`, ...data };
+      await saveEquipment(newItem);
+      equipment.unshift(newItem);
+      if (addToQrQueueInput.checked) {
+        try {
+          addStickerToQueue(newItem);
+          toast(`${data.name} added to the QR print queue.`);
+        } catch {
+          toast("Equipment was added, but the QR print queue could not be saved.", "error");
+        }
+      } else {
+        toast(`Added ${data.name} to the shared inventory.`);
       }
     }
-    else toast(`Added ${data.name} to this browser's sample inventory.`);
+  } catch (error) {
+    formError.textContent = error.message || "Could not save equipment.";
+    return;
+  } finally {
+    saveButton.disabled = false;
   }
   closeModal(formModal);
   render();
 });
 
 // Delete -------------------------------------------------------------------------
-document.getElementById("delete-btn")?.addEventListener("click", () => {
+document.getElementById("delete-btn")?.addEventListener("click", async () => {
   const item = equipment.find((x) => x.id === selectedId);
-  const onLoan = transactions.some((t) => t.equipmentId === item.id && !t.returnedAt);
-  if (onLoan) {
-    toast("This item has units on loan. Process the returns before deleting it.", "error");
+  const hasHistory = transactions.some((t) => t.equipmentId === item.id);
+  if (hasHistory) {
+    toast("This item has loan history and cannot be deleted. Keep it in inventory to preserve those records.", "error");
     return;
   }
   if (!confirm(`Delete "${item.name}"? This can't be undone.`)) return;
-  equipment.splice(equipment.indexOf(item), 1);
+  try {
+    await deleteEquipment(item.id);
+    equipment.splice(equipment.indexOf(item), 1);
+  } catch (error) {
+    toast(error.message || "Could not delete equipment.", "error");
+    return;
+  }
   closeModal(detailModal);
-  toast(`Deleted ${item.name} from this browser's sample inventory.`);
+  toast(`Deleted ${item.name} from the shared inventory.`);
   render();
 });
 

@@ -1,7 +1,10 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
-const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const supabaseUrl = Deno.env.get("SUPABASE_URL");
+const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+if (!supabaseUrl || !serviceRoleKey) {
+  throw new Error("SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be configured.");
+}
 const rateLimitSecret = Deno.env.get("PIN_RATE_LIMIT_SECRET");
 const allowedOrigins = (Deno.env.get("APP_ORIGINS") ?? "")
   .split(",")
@@ -106,15 +109,26 @@ async function verifyPin(pin: string, storedHash: string | undefined) {
 }
 
 async function rateBucket(value: string) {
+  if (!rateLimitSecret) throw new Error("PIN_RATE_LIMIT_SECRET is not configured.");
   const key = await crypto.subtle.importKey(
     "raw",
-    encoder.encode(rateLimitSecret!),
+    encoder.encode(rateLimitSecret),
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign"],
   );
   const digest = new Uint8Array(await crypto.subtle.sign("HMAC", key, encoder.encode(value)));
   return [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function pinAttemptAllowed(ipAddress: string, studentId: string, recordFailure: boolean) {
+  const { data, error } = await admin.rpc("consume_student_pin_login", {
+    p_ip_bucket: await rateBucket(`ip:${ipAddress}`),
+    p_student_bucket: await rateBucket(`student:${studentId.toLowerCase()}`),
+    p_record_failure: recordFailure,
+  });
+  if (error) throw error;
+  return data === true;
 }
 
 async function setStudentPin(body: Record<string, unknown>, request: Request) {
@@ -175,6 +189,129 @@ async function setStudentPin(body: Record<string, unknown>, request: Request) {
   return { status: 200, body: { ok: true } };
 }
 
+async function requireStaff(request: Request) {
+  const authorization = request.headers.get("authorization") ?? "";
+  const accessToken = authorization.match(/^Bearer\s+(.+)$/i)?.[1];
+  if (!accessToken) return null;
+
+  const { data: authData, error: authError } = await admin.auth.getUser(accessToken);
+  if (authError || !authData.user) return null;
+  const { data: profile, error } = await admin
+    .from("profiles")
+    .select("id, role")
+    .eq("id", authData.user.id)
+    .maybeSingle();
+  if (error) throw error;
+  return profile?.role === "admin" ? authData.user : null;
+}
+
+async function lookupStudentForStaff(body: Record<string, unknown>, request: Request) {
+  const staff = await requireStaff(request);
+  if (!staff) return { status: 403, body: { error: "Staff authorization is required." } };
+
+  const query = typeof body.query === "string" ? body.query.trim() : "";
+  if (!query || query.length > 120) {
+    return { status: 400, body: { error: "Enter a Student ID or name to search." } };
+  }
+
+  const { data: exact, error: exactError } = await admin
+    .from("profiles")
+    .select("id, full_name, student_no, school_email_verified, pin_configured")
+    .eq("student_no", query)
+    .eq("role", "student")
+    .maybeSingle();
+  if (exactError) throw exactError;
+  if (exact?.school_email_verified && exact.pin_configured) {
+    return {
+      status: 200,
+      body: {
+        student: {
+          id: exact.id,
+          name: exact.full_name,
+          studentNo: exact.student_no,
+        },
+      },
+    };
+  }
+
+  const escapedQuery = query.replace(/[\\%_]/g, "\\$&");
+  const { data: matches, error: searchError } = await admin
+    .from("profiles")
+    .select("id, full_name, student_no, school_email_verified, pin_configured")
+    .eq("role", "student")
+    .eq("school_email_verified", true)
+    .eq("pin_configured", true)
+    .ilike("full_name", `%${escapedQuery}%`)
+    .limit(2);
+  if (searchError) throw searchError;
+  if ((matches?.length ?? 0) > 1) {
+    return { status: 409, body: { error: "More than one student matches that name. Search using the exact Student ID." } };
+  }
+  const match = matches?.[0];
+  if (!match) return { status: 404, body: { error: "No verified student account found. Check the Student ID or name." } };
+  return {
+    status: 200,
+    body: {
+      student: {
+        id: match.id,
+        name: match.full_name,
+        studentNo: match.student_no,
+      },
+    },
+  };
+}
+
+async function verifyStudentPinForStaff(body: Record<string, unknown>, request: Request) {
+  const staff = await requireStaff(request);
+  if (!staff) return { status: 403, body: { error: "Staff authorization is required." } };
+  const studentId = typeof body.student_no === "string" ? body.student_no.trim() : "";
+  const pin = typeof body.pin === "string" ? body.pin : "";
+  if (!studentId || studentId.length > 80) {
+    return { status: 401, body: { error: genericLoginFailure } };
+  }
+  if (!rateLimitSecret) throw new Error("PIN_RATE_LIMIT_SECRET is not configured.");
+
+  const ipAddress = request.headers.get("cf-connecting-ip") ?? "edge-ip-unavailable";
+  if (!await pinAttemptAllowed(ipAddress, studentId, false)) {
+    return { status: 429, body: { error: "Too many attempts. Wait 15 minutes and try again." } };
+  }
+
+  const { data: profile, error: profileError } = await admin
+    .from("profiles")
+    .select("id, student_no, school_email_verified, pin_configured")
+    .eq("student_no", studentId)
+    .eq("role", "student")
+    .maybeSingle();
+  if (profileError) throw profileError;
+
+  let storedHash: string | undefined;
+  if (profile?.school_email_verified && profile.pin_configured) {
+    const { data: credential, error: credentialError } = await admin
+      .from("student_pin_credentials")
+      .select("pin_hash")
+      .eq("student_no", profile.student_no)
+      .eq("auth_user_id", profile.id)
+      .maybeSingle();
+    if (credentialError) throw credentialError;
+    storedHash = credential?.pin_hash;
+  }
+  const pinMatches = await verifyPin(/^\d{4}$/.test(pin) ? pin : "0000", storedHash);
+  let valid = Boolean(profile?.school_email_verified && profile.pin_configured && pinMatches);
+  if (valid && profile) {
+    const { data: authData, error: authError } = await admin.auth.admin.getUserById(profile.id);
+    valid = !authError && Boolean(
+      authData.user?.email_confirmed_at && isKldEmail(authData.user.email)
+    );
+  }
+  if (!valid) {
+    if (!await pinAttemptAllowed(ipAddress, studentId, true)) {
+      return { status: 429, body: { error: "Too many attempts. Wait 15 minutes and try again." } };
+    }
+    return { status: 401, body: { error: genericLoginFailure } };
+  }
+  return { status: 200, body: { ok: true } };
+}
+
 async function loginWithStudentPin(body: Record<string, unknown>, request: Request) {
   const studentId = typeof body.student_id === "string" ? body.student_id.trim() : "";
   const pin = typeof body.pin === "string" ? body.pin : "";
@@ -185,12 +322,7 @@ async function loginWithStudentPin(body: Record<string, unknown>, request: Reque
     return { status: 401, body: { error: genericLoginFailure } };
   }
 
-  const { data: allowed, error: limitError } = await admin.rpc("consume_student_pin_login", {
-    p_ip_bucket: await rateBucket(`ip:${ipAddress}`),
-    p_student_bucket: await rateBucket(`student:${studentId.toLowerCase()}`),
-  });
-  if (limitError) throw limitError;
-  if (!allowed) {
+  if (!await pinAttemptAllowed(ipAddress, studentId, false)) {
     return { status: 429, body: { error: "Too many attempts. Wait 15 minutes and try again." } };
   }
 
@@ -198,7 +330,7 @@ async function loginWithStudentPin(body: Record<string, unknown>, request: Reque
   const normalizedPin = validPinFormat ? pin : "0000";
   const { data: profile, error: profileError } = await admin
     .from("profiles")
-    .select("id, role, school_email_verified, student_no")
+    .select("id, role, school_email_verified, pin_configured, student_no")
     .eq("student_no", studentId)
     .eq("role", "student")
     .maybeSingle();
@@ -217,29 +349,34 @@ async function loginWithStudentPin(body: Record<string, unknown>, request: Reque
   }
 
   const pinMatches = await verifyPin(normalizedPin, storedHash);
-  if (
-    !validPinFormat ||
-    !profile ||
-    profile.role !== "student" ||
-    !profile.school_email_verified ||
-    !storedHash ||
-    !pinMatches
-  ) {
-    return { status: 401, body: { error: genericLoginFailure } };
+  let valid = Boolean(
+    validPinFormat &&
+    profile?.role === "student" &&
+    profile.school_email_verified &&
+    profile.pin_configured &&
+    storedHash &&
+    pinMatches
+  );
+  let verifiedEmail: string | null = null;
+  if (valid && profile) {
+    const { data: authData, error: userError } = await admin.auth.admin.getUserById(profile.id);
+    valid = Boolean(
+      !userError &&
+      authData.user?.email_confirmed_at &&
+      isKldEmail(authData.user.email)
+    );
+    if (valid) verifiedEmail = authData.user.email ?? null;
   }
-
-  const { data: authData, error: userError } = await admin.auth.admin.getUserById(profile.id);
-  if (
-    userError ||
-    !authData.user?.email_confirmed_at ||
-    !isKldEmail(authData.user.email)
-  ) {
+  if (!valid || !verifiedEmail) {
+    if (!await pinAttemptAllowed(ipAddress, studentId, true)) {
+      return { status: 429, body: { error: "Too many attempts. Wait 15 minutes and try again." } };
+    }
     return { status: 401, body: { error: genericLoginFailure } };
   }
 
   const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
     type: "magiclink",
-    email: authData.user.email,
+    email: verifiedEmail,
   });
   const tokenHash = linkData?.properties?.hashed_token;
   if (linkError || !tokenHash) throw linkError ?? new Error("Supabase did not return a one-time login token.");
@@ -273,6 +410,10 @@ Deno.serve(async (request) => {
     }
     const result = body.action === "set_pin"
       ? await setStudentPin(body, request)
+      : body.action === "lookup_student"
+      ? await lookupStudentForStaff(body, request)
+      : body.action === "verify_student_pin"
+      ? await verifyStudentPinForStaff(body, request)
       : body.action === "login"
       ? await loginWithStudentPin(body, request)
       : { status: 400, body: { error: "Invalid request." } };

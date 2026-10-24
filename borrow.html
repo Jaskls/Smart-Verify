@@ -39,8 +39,7 @@
                   <div class="input-icon">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
                     <label class="visually-hidden" for="student-search">Student number or name</label>
-                    <input class="input" id="student-search" list="student-options" placeholder="Student number or name (try 2024-00117)" autocomplete="off">
-                    <datalist id="student-options"></datalist>
+                    <input class="input" id="student-search" placeholder="Student ID or verified student name" autocomplete="off">
                   </div>
                   <button class="btn" type="button" id="find-student">Find</button>
                   <button class="btn" type="button" disabled title="QR scanning arrives in Stage 6">
@@ -93,7 +92,8 @@
               </div>
               <div class="field" style="margin-top:12px">
                 <label for="pin">Student PIN</label>
-                <input class="input mono" id="pin" type="password" inputmode="numeric" placeholder="Verification arrives in Stage 6" disabled>
+                <input class="input mono" id="pin" type="password" inputmode="numeric" maxlength="4" placeholder="Student enters their 4-digit PIN" disabled>
+                <small class="field-hint">Have the student enter it themselves. The PIN is checked securely and is not saved with the loan.</small>
               </div>
               <div class="ticket">
                 <button class="btn btn-green btn-block" type="button" id="confirm-borrow">Confirm borrow</button>

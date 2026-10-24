@@ -1,9 +1,5 @@
-/* SAMPLE DATA — Stage 1 only
-Every page reads its data from THIS file so the interface can be clicked
-through before the database exists. In Stage 2 these arrays are replaced by
-Supabase queries; nothing else in the UI should need to know the difference.
-
-Nothing here is saved. Changes made on a page are lost on reload.
+/* Fallback fixtures for signed-out screens and local UI previews.
+Authenticated pages replace these arrays with Supabase data in store.js.
 
 Dates are relative to "today" so due / overdue labels always look realistic. */
 const DAY = 24 * 60 * 60 * 1000;

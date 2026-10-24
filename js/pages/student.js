@@ -1,5 +1,4 @@
-// Student portal — the signed-in student's own loans.
-// The profile is real; the borrowing records are not yet connected to Supabase.
+// Student portal — the signed-in student's own shared loans.
 import { transactions, findEquipment } from "../sample-data.js";
 import {
   renderShell, escapeHtml, formatDate, daysUntil,

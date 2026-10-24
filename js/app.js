@@ -6,7 +6,7 @@
 • toast() and modal helpers */
 
 import { signOut } from "./auth.js";
-import "./store.js"; // loads saved data into the sample-data arrays (see store.js)
+import "./store.js"; // hydrates shared account data from Supabase before page modules run.
 
 const THEME_KEY = "sv-theme";
 const themePreference = window.matchMedia("(prefers-color-scheme: dark)");
@@ -146,7 +146,7 @@ export function renderShell({ profile, active }) {
   if (main && !main.querySelector(".sample-data-notice")) {
     const notice = document.createElement("div");
     notice.className = "preview-banner sample-data-notice";
-    notice.innerHTML = "<strong>Sample data:</strong> Equipment and borrowing records are examples; only accounts use Supabase.";
+    notice.innerHTML = "<strong>Shared data:</strong> Equipment and borrowing records are saved in Supabase. Equipment photo previews and the QR print queue are local to this browser.";
     main.prepend(notice);
   }
 
