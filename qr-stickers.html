@@ -22,11 +22,26 @@
         </div>
         <div class="page-actions screen-only">
           <a class="btn" href="equipment.html">Equipment</a>
+          <a class="btn" href="qr-sheet.html" target="_blank">See all QR codes</a>
+          <button class="btn btn-green" type="button" id="queue-all">Add all equipment to queue</button>
           <button class="btn btn-primary" type="button" id="print-stickers">Print All Queued Stickers</button>
           <button class="btn btn-danger" type="button" id="clear-queue">Clear Queue</button>
         </div>
       </header>
       <main class="content">
+        <section class="card screen-only" id="qr-maker" style="margin-bottom:16px">
+          <div class="card-head"><h2>Make your own QR code</h2></div>
+          <div class="card-body">
+            <div class="form-grid">
+              <div class="field"><label for="qr-code-text">Code</label>
+                <input class="input mono" id="qr-code-text" maxlength="60" placeholder="e.g. LAB-OSC-042" autocomplete="off"></div>
+              <div class="field"><label for="qr-label-text">Label printed on the sticker</label>
+                <input class="input" id="qr-label-text" maxlength="60" placeholder="e.g. Oscilloscope" autocomplete="off"></div>
+            </div>
+            <button class="btn btn-green" type="button" id="qr-make" style="margin-top:12px">Create QR and add to queue</button>
+            <p class="hint muted" style="margin-top:8px;font-size:12px">To make a scan find a tool, use this same code as the tool's Asset tag when you add or edit it under Equipment.</p>
+          </div>
+        </section>
         <p class="result-count" id="queue-count" aria-live="polite"></p>
         <div id="sticker-pages" class="sticker-pages" aria-live="polite"></div>
       </main>
