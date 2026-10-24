@@ -502,4 +502,8 @@ renderSlip();
 renderLoanPick();
 renderReturnSlip();
 renderOffline();
-if (location.hash === "#return") setMode("return");
+// Show the right tab on load, and again whenever the address changes
+// (e.g. clicking a "#return" link while already on this page, or the sidebar link).
+const modeFromHash = () => (location.hash === "#return" ? "return" : "borrow");
+setMode(modeFromHash());
+window.addEventListener("hashchange", () => setMode(modeFromHash()));
