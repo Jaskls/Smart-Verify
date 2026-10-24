@@ -88,8 +88,10 @@ create table if not exists public.equipment (
   available integer not null check (available >= 0 and available <= total),
   condition text not null default 'Good',
   components jsonb not null default '[]'::jsonb check (jsonb_typeof(components) = 'array'),
+  photo_url text,
   created_at timestamptz not null default now()
 );
+alter table public.equipment add column if not exists photo_url text;
 
 create table if not exists public.equipment_loans (
   id uuid primary key default gen_random_uuid(),
@@ -189,6 +191,48 @@ as $$
 $$;
 revoke all on function public.is_smart_verify_admin() from public, anon;
 grant execute on function public.is_smart_verify_admin() to authenticated, service_role;
+
+create table if not exists public.qr_sticker_queue (
+  user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  code text not null check (code = trim(code) and code <> ''),
+  label text not null check (label = trim(label) and label <> ''),
+  equipment_id text references public.equipment(id) on delete set null,
+  created_at timestamptz not null default now(),
+  primary key (user_id, code)
+);
+alter table public.qr_sticker_queue enable row level security;
+revoke all on public.qr_sticker_queue from public, anon;
+grant select, insert, update, delete on public.qr_sticker_queue to authenticated;
+drop policy if exists "Admins manage their own QR sticker queue" on public.qr_sticker_queue;
+create policy "Admins manage their own QR sticker queue"
+  on public.qr_sticker_queue for all to authenticated
+  using (user_id = (select auth.uid()) and (select public.is_smart_verify_admin()))
+  with check (user_id = (select auth.uid()) and (select public.is_smart_verify_admin()));
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('equipment-photos', 'equipment-photos', true, 5242880, array['image/jpeg', 'image/png', 'image/webp'])
+on conflict (id) do update set
+  public = excluded.public,
+  file_size_limit = excluded.file_size_limit,
+  allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists "Public can view equipment photos" on storage.objects;
+create policy "Public can view equipment photos"
+  on storage.objects for select to public
+  using (bucket_id = 'equipment-photos');
+drop policy if exists "Admins upload equipment photos" on storage.objects;
+create policy "Admins upload equipment photos"
+  on storage.objects for insert to authenticated
+  with check (bucket_id = 'equipment-photos' and (select public.is_smart_verify_admin()));
+drop policy if exists "Admins update equipment photos" on storage.objects;
+create policy "Admins update equipment photos"
+  on storage.objects for update to authenticated
+  using (bucket_id = 'equipment-photos' and (select public.is_smart_verify_admin()))
+  with check (bucket_id = 'equipment-photos' and (select public.is_smart_verify_admin()));
+drop policy if exists "Admins delete equipment photos" on storage.objects;
+create policy "Admins delete equipment photos"
+  on storage.objects for delete to authenticated
+  using (bucket_id = 'equipment-photos' and (select public.is_smart_verify_admin()));
 
 alter table public.equipment_loan_overrides enable row level security;
 revoke all on public.equipment_loan_overrides from public, anon, authenticated;
